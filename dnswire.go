@@ -6,15 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 // HeaderSize is the size of a DNS message header in octets.
 const HeaderSize = 12
 
 const (
-	maxMessageSize  = 1<<16 - 1
-	maxNameWireSize = 255
+	maxMessageSize          = 1<<16 - 1
+	maxNameWireSize         = 255
+	maxNamePresentationSize = 4 * maxNameWireSize
 )
 
 var (
@@ -85,11 +85,23 @@ func Parse(data []byte) (message Message, err error) {
 	}
 
 	message.Questions = make([]Question, 0, questionCount)
-	names := make(map[int]nameSuffix)
+	var names map[int]nameSuffix
+	if questionCount > 1 {
+		names = make(map[int]nameSuffix)
+	}
 	off := HeaderSize
 	for i := 0; i < questionCount; i++ {
 		var question Question
-		question.Name, off, err = unpackName(data, off, names)
+		ordinary := false
+		if questionCount == 1 {
+			question.Name, off, ordinary, err = unpackOrdinaryName(data, off)
+		}
+		if err == nil && !ordinary {
+			if names == nil {
+				names = make(map[int]nameSuffix)
+			}
+			question.Name, off, err = unpackName(data, off, names)
+		}
 		if err == nil && off+4 > len(data) {
 			err = malformed(off, "question type or class is truncated")
 		}
@@ -108,10 +120,59 @@ func Parse(data []byte) (message Message, err error) {
 	return
 }
 
+func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
+	var text [maxNamePresentationSize]byte
+	rendered := text[:0]
+	wireLength := 0
+	off := start
+	next = start
+	ordinary = true
+
+	for {
+		if off >= len(data) {
+			err = malformed(off, "domain name is not terminated")
+			return
+		}
+
+		length := data[off]
+		if length&0xc0 != 0 {
+			ordinary = false
+			return
+		}
+		if length == 0 {
+			if len(rendered) == 0 {
+				name = "."
+			} else {
+				name = string(rendered)
+			}
+			next = off + 1
+			return
+		}
+
+		labelLength := int(length)
+		end := off + 1 + labelLength
+		if end > len(data) {
+			err = malformed(off, "domain label is truncated")
+			return
+		}
+		wireLength += 1 + labelLength
+		if wireLength >= maxNameWireSize {
+			err = malformed(start, "domain name exceeds 255 octets")
+			return
+		}
+
+		rendered = appendEscapedLabel(rendered, data[off+1:end])
+		rendered = append(rendered, '.')
+		off = end
+	}
+}
+
 type namePart struct {
-	offset     int
-	text       string
-	wireLength int
+	offset           uint16
+	wireLength       uint16
+	suffixWireLength uint16
+	textOffset       uint16
+	bits             uint16
 }
 
 type nameSuffix struct {
@@ -120,7 +181,8 @@ type nameSuffix struct {
 }
 
 func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
-	parts := make([]namePart, 0, 4)
+	var partBuffer [4]namePart
+	parts := partBuffer[:0]
 	prefixWireLength := 0
 	off := start
 
@@ -138,7 +200,7 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				tail := nameSuffix{wireLength: 1}
 				names[labelOffset] = tail
 				var result nameSuffix
-				result, err = completeName(parts, tail, names)
+				result, err = completeName(data, parts, tail, names)
 				if err == nil {
 					name = presentationName(result)
 					next = off + 1
@@ -158,9 +220,8 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				return
 			}
 			parts = append(parts, namePart{
-				offset:     labelOffset,
-				text:       escapeLabel(data[off+1 : end]),
-				wireLength: 1 + labelLength,
+				offset:     uint16(labelOffset),     // #nosec G115 -- data is limited to 65535 octets.
+				wireLength: uint16(1 + labelLength), // #nosec G115 -- ordinary labels are at most 63 octets.
 			})
 			off = end
 
@@ -169,18 +230,21 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				err = unsupportedLabel(off, length)
 				return
 			}
-			var part namePart
-			part.offset = labelOffset
-			part.text, part.wireLength, off, err = unpackBitStringLabel(data, off)
+			var bits, wireLength int
+			bits, wireLength, off, err = unpackBitStringLabel(data, off)
 			if err != nil {
 				return
 			}
-			prefixWireLength += part.wireLength
+			prefixWireLength += wireLength
 			if prefixWireLength >= maxNameWireSize {
 				err = malformed(start, "domain name exceeds 255 octets")
 				return
 			}
-			parts = append(parts, part)
+			parts = append(parts, namePart{
+				offset:     uint16(labelOffset), // #nosec G115 -- data is limited to 65535 octets.
+				wireLength: uint16(wireLength),  // #nosec G115 -- bit-string labels are at most 34 octets.
+				bits:       uint16(bits),        // #nosec G115 -- bit-string labels are at most 256 bits.
+			})
 
 		case 0xc0:
 			if off+1 >= len(data) {
@@ -199,7 +263,7 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 			}
 			names[labelOffset] = tail
 			var result nameSuffix
-			result, err = completeName(parts, tail, names)
+			result, err = completeName(data, parts, tail, names)
 			if err == nil {
 				name = presentationName(result)
 				next = off + 2
@@ -213,21 +277,46 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 	}
 }
 
-func completeName(parts []namePart, tail nameSuffix, names map[int]nameSuffix) (result nameSuffix, err error) {
+func completeName(data []byte, parts []namePart, tail nameSuffix, names map[int]nameSuffix) (result nameSuffix, err error) {
 	result = tail
 	for i := len(parts) - 1; i >= 0; i-- {
-		part := parts[i]
-		if part.wireLength > maxNameWireSize-result.wireLength {
-			err = malformed(part.offset, "domain name exceeds 255 octets")
+		wireLength := int(parts[i].wireLength)
+		if wireLength > maxNameWireSize-result.wireLength {
+			err = malformed(int(parts[i].offset), "domain name exceeds 255 octets")
 			return
 		}
-		result.wireLength += part.wireLength
-		if result.text == "" {
-			result.text = part.text + "."
+		result.wireLength += wireLength
+		parts[i].suffixWireLength = uint16(result.wireLength) // #nosec G115 -- the checked limit is 255 octets.
+	}
+
+	if len(parts) == 0 {
+		return
+	}
+
+	var text [maxNamePresentationSize]byte
+	rendered := text[:0]
+	for i := range parts {
+		part := &parts[i]
+		part.textOffset = uint16(len(rendered)) // #nosec G115 -- presentation names are bounded by 1020 octets.
+		off := int(part.offset)
+		if part.bits == 0 {
+			labelLength := int(data[off])
+			rendered = appendEscapedLabel(rendered, data[off+1:off+1+labelLength])
 		} else {
-			result.text = part.text + "." + result.text
+			bits := int(part.bits)
+			byteCount := (bits + 7) / 8
+			rendered = appendBitStringPresentation(rendered, data[off+2:off+2+byteCount], bits)
 		}
-		names[part.offset] = result
+		rendered = append(rendered, '.')
+	}
+	rendered = append(rendered, tail.text...)
+	result.text = string(rendered)
+
+	for _, part := range parts {
+		names[int(part.offset)] = nameSuffix{
+			text:       result.text[int(part.textOffset):],
+			wireLength: int(part.suffixWireLength),
+		}
 	}
 	return
 }
@@ -239,12 +328,12 @@ func presentationName(name nameSuffix) string {
 	return name.text
 }
 
-func unpackBitStringLabel(data []byte, off int) (text string, wireLength int, next int, err error) {
+func unpackBitStringLabel(data []byte, off int) (bits int, wireLength int, next int, err error) {
 	if off+1 >= len(data) {
 		err = malformed(off, "bit-string label has no bit count")
 		return
 	}
-	bits := int(data[off+1])
+	bits = int(data[off+1])
 	if bits == 0 {
 		bits = 256
 	}
@@ -255,18 +344,15 @@ func unpackBitStringLabel(data []byte, off int) (text string, wireLength int, ne
 		return
 	}
 
-	text = bitStringPresentation(data[off+2:next], bits)
 	wireLength = 2 + byteCount
 	return
 }
 
-func bitStringPresentation(data []byte, bits int) string {
+func appendBitStringPresentation(text, data []byte, bits int) []byte {
 	const hexDigits = "0123456789abcdef"
 	digitCount := (bits + 3) / 4
 
-	var text strings.Builder
-	text.Grow(digitCount + 8)
-	text.WriteString(`\[x`)
+	text = append(text, '\\', '[', 'x')
 	for i := 0; i < digitCount; i++ {
 		value := data[i/2]
 		if i%2 == 0 {
@@ -277,34 +363,27 @@ func bitStringPresentation(data []byte, bits int) string {
 		if i == digitCount-1 && bits%4 != 0 {
 			value &= 0x0f << (4 - bits%4)
 		}
-		text.WriteByte(hexDigits[value])
+		text = append(text, hexDigits[value])
 	}
-	text.WriteByte('/')
-	text.WriteString(strconv.Itoa(bits))
-	text.WriteByte(']')
-	return text.String()
+	text = append(text, '/')
+	text = strconv.AppendInt(text, int64(bits), 10)
+	return append(text, ']')
 }
 
-func escapeLabel(label []byte) string {
-	var text strings.Builder
-	text.Grow(len(label))
+func appendEscapedLabel(text, label []byte) []byte {
 	for _, value := range label {
 		switch value {
 		case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
-			text.WriteByte('\\')
-			text.WriteByte(value)
+			text = append(text, '\\', value)
 		default:
 			if value < ' ' || value > '~' {
-				text.WriteByte('\\')
-				text.WriteByte('0' + value/100)
-				text.WriteByte('0' + value/10%10)
-				text.WriteByte('0' + value%10)
+				text = append(text, '\\', '0'+value/100, '0'+value/10%10, '0'+value%10)
 			} else {
-				text.WriteByte(value)
+				text = append(text, value)
 			}
 		}
 	}
-	return text.String()
+	return text
 }
 
 func malformed(off int, reason string) error {

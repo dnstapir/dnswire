@@ -111,6 +111,19 @@ func TestParseCompressionPointerChain(t *testing.T) {
 	}
 }
 
+func TestParseManyLabels(t *testing.T) {
+	name := wireName([]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e"))
+	got, err := Parse(compressedQuestionPair(name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, question := range got.Questions {
+		if question.Name != "a.b.c.d.e." {
+			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, "a.b.c.d.e.")
+		}
+	}
+}
+
 func TestParseHistoricBitStringLabel(t *testing.T) {
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	data = append(data, 0x41, 14, 0xd0, 0x74, 0)
@@ -149,6 +162,15 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	if got.Questions[0].Name != `\[x8/1].` {
 		t.Fatalf("Name = %q", got.Questions[0].Name)
 	}
+
+	data = questionPacket([]byte{0x41, 1, 0xff, 3, 'c', 'o', 'm', 0})
+	got, err = Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Questions[0].Name != `\[x8/1].com.` {
+		t.Fatalf("Name = %q", got.Questions[0].Name)
+	}
 }
 
 func TestParseNameWireLengthLimit(t *testing.T) {
@@ -171,6 +193,14 @@ func TestParseNameWireLengthLimit(t *testing.T) {
 
 func TestParseMalformed(t *testing.T) {
 	tooLarge := make([]byte, maxMessageSize+1)
+	genericUnterminated := append(testHeader(0, 0, 2, 0, 0, 0), 9, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a')
+	genericTruncated := append(testHeader(0, 0, 2, 0, 0, 0), 10, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a')
+	genericTooLong := append(testHeader(0, 0, 2, 0, 0, 0), wireName(
+		bytes.Repeat([]byte{'a'}, 63),
+		bytes.Repeat([]byte{'b'}, 63),
+		bytes.Repeat([]byte{'c'}, 63),
+		bytes.Repeat([]byte{'d'}, 62),
+	)...)
 	tooManyBitStrings := make([]byte, 0, 8*34)
 	for range 8 {
 		tooManyBitStrings = append(tooManyBitStrings, 0x41, 0)
@@ -187,6 +217,9 @@ func TestParseMalformed(t *testing.T) {
 		{name: "impossible question count", data: testHeader(0, 0, 1, 0, 0, 0), want: ErrMalformed},
 		{name: "unterminated name", data: append(testHeader(0, 0, 1, 0, 0, 0), 4, 'a', 'b', 'c', 'd'), want: ErrMalformed},
 		{name: "truncated label", data: append(testHeader(0, 0, 1, 0, 0, 0), 5, 'a', 'b', 'c', 'd'), want: ErrMalformed},
+		{name: "generic unterminated name", data: genericUnterminated, want: ErrMalformed},
+		{name: "generic truncated label", data: genericTruncated, want: ErrMalformed},
+		{name: "generic name too long", data: genericTooLong, want: ErrMalformed},
 		{name: "truncated type and class", data: append(testHeader(0, 0, 1, 0, 0, 0), 1, 'a', 0, 0, 1), want: ErrMalformed},
 		{name: "truncated pointer", data: append(testHeader(0, 0, 1, 0, 0, 0), 3, 'a', 'b', 'c', 0xc0), want: ErrMalformed},
 		{name: "forward pointer", data: questionPacket([]byte{0xc0, HeaderSize + 2}), want: ErrMalformed},
@@ -288,14 +321,17 @@ func FuzzParseOrdinaryName(f *testing.F) {
 			labels = append(labels, second)
 		}
 
-		got, err := Parse(compressedQuestionPair(wireName(labels...)))
-		if err != nil {
-			t.Fatal(err)
-		}
+		name := wireName(labels...)
 		want := testPresentationName(labels...)
-		for i, question := range got.Questions {
-			if question.Name != want {
-				t.Fatalf("Questions[%d].Name = %q, want %q", i, question.Name, want)
+		for _, data := range [][]byte{questionPacket(name), compressedQuestionPair(name)} {
+			got, err := Parse(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, question := range got.Questions {
+				if question.Name != want {
+					t.Fatalf("Questions[%d].Name = %q, want %q", i, question.Name, want)
+				}
 			}
 		}
 	})

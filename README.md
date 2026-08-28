@@ -46,7 +46,7 @@ Comparative benchmarks use the miekg/dns versions used by EDM. These are
 benchmark-only dependencies; the parser package imports neither version.
 
 ```sh
-go test -run=^$ -bench=. -benchmem -count=6
+go test -run=^$ -bench=. -benchmem -count=10
 ```
 
 The v2 benchmark intentionally accepts its lossy presentation name and
@@ -58,16 +58,16 @@ identical input bytes. Each benchmark consumes the message ID, the first
 question's name, type, and class, and the total question count.
 
 Results recorded 2026-08-28 with Go 1.27.0 on darwin/arm64 (Apple M5 Max),
-using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of six runs.
+using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of ten runs.
 
 | Input | Parser | ns/op | B/op | allocs/op |
 | --- | --- | ---: | ---: | ---: |
-| Typical | dnswire | 115.2 | 88 | 7 |
-| Typical | miekg/dns v1 | 54.4 | 40 | 2 |
-| Typical | miekg/dns v2 | 47.4 | 80 | 3 |
-| Unusual legal octets | dnswire | 122.4 | 144 | 7 |
-| Unusual legal octets | miekg/dns v1 | 65.4 | 72 | 2 |
-| Unusual legal octets | miekg/dns v2 | 45.4 | 88 | 3 |
-| Three compressed questions | dnswire | 138.8 | 128 | 7 |
-| Three compressed questions | miekg/dns v1 | 143.4 | 208 | 6 |
-| Three compressed questions | miekg/dns v2 | 138.6 | 296 | 9 |
+| Typical | dnswire | 41.75 | 40 | 2 |
+| Typical | miekg/dns v1 | 54.36 | 40 | 2 |
+| Typical | miekg/dns v2 | 48.29 | 80 | 3 |
+| Unusual legal octets | dnswire | 45.70 | 72 | 2 |
+| Unusual legal octets | miekg/dns v1 | 67.31 | 72 | 2 |
+| Unusual legal octets | miekg/dns v2 | 47.04 | 88 | 3 |
+| Three compressed questions | dnswire | 115.9 | 104 | 3 |
+| Three compressed questions | miekg/dns v1 | 137.6 | 208 | 6 |
+| Three compressed questions | miekg/dns v2 | 141.7 | 296 | 9 |
