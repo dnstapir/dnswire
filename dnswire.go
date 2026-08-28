@@ -106,35 +106,50 @@ func Parse(data []byte) (message Message, err error) {
 	off := HeaderSize
 	for i := range questionCount {
 		var question Question
-		ordinary := false
-		if questionCount == 1 {
-			question.Name, off, ordinary, err = unpackOrdinaryName(data, off)
+		question, off, names, err = unpackQuestion(data, off, names)
+		if err != nil {
+			message = Message{}
+			err = fmt.Errorf("question %d: %w", i, err)
+			return
 		}
-		if err == nil && !ordinary {
-			if names == nil {
-				names = make(map[int]nameSuffix)
-			}
-			question.Name, off, err = unpackName(data, off, names)
+		if i == 0 {
+			message.Question = question
+		} else {
+			message.moreQuestions = append(message.moreQuestions, question)
 		}
-		if err == nil && off+4 > len(data) {
-			err = malformed(off, "question type or class is truncated")
-		}
-		if err == nil {
-			question.Type = binary.BigEndian.Uint16(data[off : off+2])
-			question.Class = binary.BigEndian.Uint16(data[off+2 : off+4])
-			off += 4
-			if i == 0 {
-				message.Question = question
-			} else {
-				message.moreQuestions = append(message.moreQuestions, question)
-			}
-			continue
-		}
+	}
+	return
+}
 
-		message = Message{}
-		err = fmt.Errorf("question %d: %w", i, err)
+// unpackQuestion decodes one question starting at off.
+//
+// A nil names marks a single-question message: the ordinary-name fast path
+// skips label boundary bookkeeping, and updated stays nil unless the name
+// needs the map. Callers pass updated back in for the next question.
+func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Question, next int, updated map[int]nameSuffix, err error) {
+	ordinary := false
+	next = off
+	updated = names
+	if updated == nil {
+		if question.Name, next, ordinary, err = unpackOrdinaryName(data, off); err != nil {
+			return
+		}
+	}
+	if !ordinary {
+		if updated == nil {
+			updated = make(map[int]nameSuffix)
+		}
+		if question.Name, next, err = unpackName(data, next, updated); err != nil {
+			return
+		}
+	}
+	if next+4 > len(data) {
+		err = malformed(next, "question type or class is truncated")
 		return
 	}
+	question.Type = binary.BigEndian.Uint16(data[next : next+2])
+	question.Class = binary.BigEndian.Uint16(data[next+2 : next+4])
+	next += 4
 	return
 }
 
