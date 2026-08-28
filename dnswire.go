@@ -35,6 +35,44 @@ type Header struct {
 	AdditionalCount uint16
 }
 
+// Response reports whether the QR flag is set: the message is a response.
+func (header Header) Response() bool { return header.Flags&(1<<15) != 0 }
+
+// Opcode returns the 4-bit OPCODE field: the kind of query in the message.
+func (header Header) Opcode() int { return int(header.Flags >> 11 & 0xf) }
+
+// Authoritative reports whether the AA flag is set: the responding server is
+// an authority for the domain name in the question section.
+func (header Header) Authoritative() bool { return header.Flags&(1<<10) != 0 }
+
+// Truncated reports whether the TC flag is set: the message was truncated.
+func (header Header) Truncated() bool { return header.Flags&(1<<9) != 0 }
+
+// RecursionDesired reports whether the RD flag is set: the sender asks the
+// server to pursue the query recursively.
+func (header Header) RecursionDesired() bool { return header.Flags&(1<<8) != 0 }
+
+// RecursionAvailable reports whether the RA flag is set: the server supports
+// recursive queries.
+func (header Header) RecursionAvailable() bool { return header.Flags&(1<<7) != 0 }
+
+// Zero reports whether the reserved Z bit is set.
+func (header Header) Zero() bool { return header.Flags&(1<<6) != 0 }
+
+// AuthenticatedData reports whether the AD flag is set: all data in the
+// response has been cryptographically verified (RFC 4035).
+func (header Header) AuthenticatedData() bool { return header.Flags&(1<<5) != 0 }
+
+// CheckingDisabled reports whether the CD flag is set: the sender accepts
+// unverified data (RFC 4035).
+func (header Header) CheckingDisabled() bool { return header.Flags&(1<<4) != 0 }
+
+// Rcode returns the 4-bit RCODE field: the response code.
+//
+// EDNS0 extended RCODE bits live in the additional section, which this
+// package does not decode.
+func (header Header) Rcode() int { return int(header.Flags & 0xf) }
+
 // Question contains one decoded DNS question.
 type Question struct {
 	// Name is an absolute RFC presentation-format domain name.

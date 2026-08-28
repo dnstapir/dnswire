@@ -60,6 +60,55 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	}
 }
 
+func TestHeaderFlags(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags uint16
+		check func(Header) bool
+	}{
+		{"Response", 1 << 15, Header.Response},
+		{"Authoritative", 1 << 10, Header.Authoritative},
+		{"Truncated", 1 << 9, Header.Truncated},
+		{"RecursionDesired", 1 << 8, Header.RecursionDesired},
+		{"RecursionAvailable", 1 << 7, Header.RecursionAvailable},
+		{"Zero", 1 << 6, Header.Zero},
+		{"AuthenticatedData", 1 << 5, Header.AuthenticatedData},
+		{"CheckingDisabled", 1 << 4, Header.CheckingDisabled},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.check(Header{Flags: test.flags}) {
+				t.Errorf("%s(%#04x) = false, want true", test.name, test.flags)
+			}
+			if test.check(Header{Flags: ^test.flags}) {
+				t.Errorf("%s(%#04x) = true, want false", test.name, ^test.flags)
+			}
+		})
+	}
+}
+
+func TestHeaderOpcodeRcode(t *testing.T) {
+	tests := []struct {
+		flags  uint16
+		opcode int
+		rcode  int
+	}{
+		{0, 0, 0},
+		{0xffff, 15, 15},
+		{5<<11 | 3, 5, 3},
+		{1<<15 | 4<<11 | 1<<8 | 9, 4, 9},
+	}
+	for _, test := range tests {
+		header := Header{Flags: test.flags}
+		if got := header.Opcode(); got != test.opcode {
+			t.Errorf("Opcode(%#04x) = %d, want %d", test.flags, got, test.opcode)
+		}
+		if got := header.Rcode(); got != test.rcode {
+			t.Errorf("Rcode(%#04x) = %d, want %d", test.flags, got, test.rcode)
+		}
+	}
+}
+
 func TestParseNoQuestions(t *testing.T) {
 	got, err := Parse(testHeader(123, 0, 0, 0, 0, 0))
 	if err != nil {
