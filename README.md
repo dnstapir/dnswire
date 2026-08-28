@@ -18,8 +18,8 @@ class values as `uint16`, so callers can compare them directly with constants
 from either `codeberg.org/miekg/dns` v2 or `github.com/miekg/dns` v1.
 
 ```go
-var message dnswire.Message
-if err := message.Unpack(packet); err != nil {
+message, err := dnswire.Parse(packet)
+if err != nil {
 	return err
 }
 for question := range message.Questions {
@@ -29,8 +29,9 @@ for question := range message.Questions {
 
 ## Scope
 
-`Unpack` validates the 12-byte header and complete question section. It does
-not inspect or validate answer, authority, or additional records.
+`Message.Unpack` validates the 12-byte header and complete question section;
+`Parse` is shorthand for it on a new `Message`. Neither inspects or validates
+answer, authority, or additional records.
 
 `Message.Question` holds the first question. `Message.Questions` enumerates
 the complete question section in wire order.

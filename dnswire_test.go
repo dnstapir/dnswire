@@ -22,7 +22,7 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	data = appendUint16(data, 28)
 	data = appendUint16(data, 255)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestHeaderOpcodeRcode(t *testing.T) {
 }
 
 func TestParseNoQuestions(t *testing.T) {
-	got, err := parse(testHeader(123, 0, 0, 0, 0, 0))
+	got, err := Parse(testHeader(123, 0, 0, 0, 0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestParseLengthIgnoresTrailingData(t *testing.T) {
 	data := questionPacket(wireName([]byte("example"), []byte("com")))
 	want := len(data)
 	data = append(data, 0xde, 0xad, 0xbe, 0xef)
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestParsePresentationNames(t *testing.T) {
 			data = appendUint16(data, 1)
 			data = appendUint16(data, 1)
 
-			got, err := parse(data)
+			got, err := Parse(data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +235,7 @@ func TestParseCompressionPointerChain(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestParseCompressionPointerChain(t *testing.T) {
 
 func TestParseManyLabels(t *testing.T) {
 	name := wireName([]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e"))
-	got, err := parse(compressedQuestionPair(name))
+	got, err := Parse(compressedQuestionPair(name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	data = append(data, 0)
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
-	got, err = parse(data)
+	got, err = Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 
 	// RFC 2673 requires receivers to ignore padding bits.
 	data = questionPacket([]byte{0x41, 1, 0xff, 0})
-	got, err = parse(data)
+	got, err = Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	}
 
 	data = questionPacket([]byte{0x41, 1, 0xff, 3, 'c', 'o', 'm', 0})
-	got, err = parse(data)
+	got, err = Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,12 +327,12 @@ func TestParseNameWireLengthLimit(t *testing.T) {
 		bytes.Repeat([]byte{'d'}, 61),
 	}
 	data := questionPacket(wireName(labels...))
-	if _, err := parse(data); err != nil {
+	if _, err := Parse(data); err != nil {
 		t.Fatalf("255-octet name: %v", err)
 	}
 
 	labels[3] = append(labels[3], 'd')
-	if _, err := parse(questionPacket(wireName(labels...))); !errors.Is(err, ErrMalformed) {
+	if _, err := Parse(questionPacket(wireName(labels...))); !errors.Is(err, ErrMalformed) {
 		t.Fatalf("256-octet name error = %v, want ErrMalformed", err)
 	}
 }
@@ -379,7 +379,7 @@ func TestParseMalformed(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := parse(test.data)
+			got, err := Parse(test.data)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("error = %v, want %v", err, test.want)
 			}
@@ -406,7 +406,7 @@ func TestParseCompressedNameTooLong(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if !errors.Is(err, ErrMalformed) {
 		t.Fatalf("error = %v, want ErrMalformed", err)
 	}
@@ -436,7 +436,7 @@ func TestParseCompressedNameMaxLength(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatalf("255-octet compressed name: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestParseCompressedNameMaxLength(t *testing.T) {
 	data = append(data, 2, 'x', 'y', 0xc0, byte(tailOffset))
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
-	if _, err = parse(data); !errors.Is(err, ErrMalformed) {
+	if _, err = Parse(data); !errors.Is(err, ErrMalformed) {
 		t.Fatalf("256-octet compressed name error = %v, want ErrMalformed", err)
 	}
 }
@@ -481,7 +481,7 @@ func TestParsePointerToBitStringBoundary(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +510,7 @@ func TestParsePointerToLabelInterior(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if !errors.Is(err, ErrMalformed) {
 		t.Fatalf("error = %v, want ErrMalformed", err)
 	}
@@ -529,7 +529,7 @@ func TestParsePointerWithinOwnName(t *testing.T) {
 	data = appendUint16(data, 1)
 	data = appendUint16(data, 1)
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if !errors.Is(err, ErrMalformed) {
 		t.Fatalf("error = %v, want ErrMalformed", err)
 	}
@@ -549,7 +549,7 @@ func TestParseMaxQuestionCount(t *testing.T) {
 		data = appendUint16(data, 1)
 	}
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestParseMaxQuestionCount(t *testing.T) {
 	}
 
 	binary.BigEndian.PutUint16(data[4:6], count+1)
-	if _, err = parse(data); !errors.Is(err, ErrMalformed) {
+	if _, err = Parse(data); !errors.Is(err, ErrMalformed) {
 		t.Fatalf("question count %d error = %v, want ErrMalformed", count+1, err)
 	}
 }
@@ -598,7 +598,7 @@ func TestParseWorstCaseCompressionAmplification(t *testing.T) {
 	}
 	binary.BigEndian.PutUint16(data[4:6], uint16(questions))
 
-	got, err := parse(data)
+	got, err := Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -636,7 +636,7 @@ func FuzzParse(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		before := bytes.Clone(data)
-		got, err := parse(data)
+		got, err := Parse(data)
 		if !bytes.Equal(data, before) {
 			t.Fatal("Parse modified its input")
 		}
@@ -665,11 +665,11 @@ func FuzzParse(f *testing.F) {
 		if got.Length < HeaderSize || got.Length > len(data) {
 			t.Fatalf("Length = %d, data is %d octets", got.Length, len(data))
 		}
-		prefix, err := parse(data[:got.Length])
+		prefix, err := Parse(data[:got.Length])
 		if err != nil || !reflect.DeepEqual(got, prefix) {
 			t.Fatalf("Unpack of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
 		}
-		again, err := parse(data)
+		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {
 			t.Fatalf("second Parse = (%#v, %v), want (%#v, nil)", again, err, got)
 		}
@@ -697,7 +697,7 @@ func FuzzParseOrdinaryName(f *testing.F) {
 		name := wireName(labels...)
 		want := testPresentationName(labels...)
 		for _, data := range [][]byte{questionPacket(name), compressedQuestionPair(name)} {
-			got, err := parse(data)
+			got, err := Parse(data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -727,7 +727,7 @@ func FuzzParseHistoricBitString(f *testing.F) {
 		name := append([]byte{0x41, count}, payload...)
 		name = append(name, 0)
 
-		got, err := parse(compressedQuestionPair(name))
+		got, err := Parse(compressedQuestionPair(name))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -740,12 +740,6 @@ func FuzzParseHistoricBitString(f *testing.F) {
 			i++
 		}
 	})
-}
-
-// parse unpacks data into a fresh Message.
-func parse(data []byte) (message Message, err error) {
-	err = message.Unpack(data)
-	return
 }
 
 func testHeader(id, flags, questions, answers, authorities, additionals uint16) []byte {

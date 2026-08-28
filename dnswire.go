@@ -103,6 +103,14 @@ func (message Message) Questions(yield func(Question) bool) {
 	}
 }
 
+// Parse decodes a DNS header and every question from data.
+//
+// It is shorthand for [Message.Unpack] on a new Message.
+func Parse(data []byte) (message Message, err error) {
+	err = message.Unpack(data)
+	return
+}
+
 // Unpack decodes a DNS header and every question from data into message,
 // overwriting it entirely.
 //
