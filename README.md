@@ -1,3 +1,7 @@
+[![build](https://github.com/linkdata/dnswire/actions/workflows/build.yml/badge.svg)](https://github.com/linkdata/dnswire/actions/workflows/build.yml)
+[![coverage](https://github.com/linkdata/dnswire/blob/gitcoverage/main/badge.svg)](https://html-preview.github.io/?url=https://github.com/linkdata/dnswire/blob/gitcoverage/main/report.html)
+[![Docs](https://godoc.org/github.com/linkdata/dnswire?status.svg)](https://godoc.org/github.com/linkdata/dnswire)
+
 # dnswire
 
 `dnswire` is a small Go parser for the DNS header and question section.
