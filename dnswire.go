@@ -128,8 +128,7 @@ func Parse(data []byte) (message Message, err error) {
 // needs the map. Callers pass updated back in for the next question.
 func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Question, next int, updated map[int]nameSuffix, err error) {
 	ordinary := false
-	next = off
-	updated = names
+	next, updated = off, names
 	if updated == nil {
 		if question.Name, next, ordinary, err = unpackOrdinaryName(data, off); err != nil {
 			return
@@ -156,10 +155,12 @@ func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Qu
 func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
 	// An unescaped presentation name is shorter than its wire encoding.
 	// Escape-heavy names grow this slice as needed.
-	var text [maxNameWireSize]byte
-	rendered := text[:0]
-	wireLength := 0
-	off := start
+	var (
+		text       [maxNameWireSize]byte
+		rendered   = text[:0]
+		wireLength int
+		off        = start
+	)
 	next = start
 	ordinary = true
 
@@ -203,10 +204,10 @@ func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary
 }
 
 type namePart struct {
-	offset     int
+	offset     int // wire offset of the label
 	wireLength int
-	textOffset int
-	bits       int
+	textOffset int // start of this label's text in the rendered name
+	bits       int // 0 for an ordinary label, else the RFC 2673 bit count (1-256)
 }
 
 type nameSuffix struct {
@@ -215,11 +216,16 @@ type nameSuffix struct {
 }
 
 func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
-	var partBuffer [4]namePart
-	parts := partBuffer[:0]
-	prefixWireLength := 0
-	off := start
+	var (
+		partBuffer       [4]namePart
+		parts            = partBuffer[:0]
+		prefixWireLength int
+		tail             nameSuffix
+		terminalSize     int
+		off              = start
+	)
 
+scan:
 	for {
 		if off >= len(data) {
 			err = malformed(off, "domain name is not terminated")
@@ -231,13 +237,9 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 		switch length & 0xc0 {
 		case 0x00:
 			if length == 0 {
-				tail := nameSuffix{wireLength: 1}
-				names[labelOffset] = tail
-				name, err = completeName(data, parts, prefixWireLength, tail, names)
-				if err == nil {
-					next = off + 1
-				}
-				return
+				tail = nameSuffix{wireLength: 1}
+				terminalSize = 1
+				break scan
 			}
 
 			labelLength := int(length)
@@ -289,23 +291,27 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				err = malformed(off, "compression pointer does not point backward")
 				return
 			}
-			tail, ok := names[target]
-			if !ok {
+			var ok bool
+			if tail, ok = names[target]; !ok {
 				err = malformed(off, "compression pointer target is not a prior label boundary")
 				return
 			}
-			names[labelOffset] = tail
-			name, err = completeName(data, parts, prefixWireLength, tail, names)
-			if err == nil {
-				next = off + 2
-			}
-			return
+			terminalSize = 2
+			break scan
 
 		default:
 			err = malformed(off, "unallocated DNS label type")
 			return
 		}
 	}
+
+	// off is the terminal label's offset: neither terminal branch advances it.
+	names[off] = tail
+	name, err = completeName(data, parts, prefixWireLength, tail, names)
+	if err == nil {
+		next = off + terminalSize
+	}
+	return
 }
 
 func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
@@ -323,8 +329,10 @@ func completeName(data []byte, parts []namePart, prefixWireLength int, tail name
 	}
 	wireLength := tail.wireLength + prefixWireLength
 
-	var text [maxNamePresentationSize]byte
-	rendered := text[:0]
+	var (
+		text     [maxNamePresentationSize]byte
+		rendered = text[:0]
+	)
 	for i := range parts {
 		part := &parts[i]
 		part.textOffset = len(rendered)
@@ -374,7 +382,7 @@ func appendBitStringPresentation(text, data []byte, bits int) []byte {
 	digitCount := (bits + 3) / 4
 
 	text = append(text, '\\', '[', 'x')
-	for i := 0; i < digitCount; i++ {
+	for i := range digitCount {
 		value := data[i/2]
 		if i%2 == 0 {
 			value >>= 4
