@@ -92,7 +92,7 @@ type Message struct {
 }
 
 // Questions yields every decoded question in wire order.
-func (message Message) Questions(yield func(Question) bool) {
+func (message *Message) Questions(yield func(Question) bool) {
 	if message.Header.QuestionCount == 0 || !yield(message.Question) {
 		return
 	}
