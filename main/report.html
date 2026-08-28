@@ -208,8 +208,7 @@ func Parse(data []byte) (message Message, err error) {
 // needs the map. Callers pass updated back in for the next question.
 func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Question, next int, updated map[int]nameSuffix, err error) {
         <span class="cov9" title="21340">ordinary := false
-        next = off
-        updated = names
+        next, updated = off, names
         if updated == nil </span>{
                 <span class="cov4" title="37">if question.Name, next, ordinary, err = unpackOrdinaryName(data, off); err != nil </span>{
                         <span class="cov1" title="3">return
@@ -236,10 +235,12 @@ func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Qu
 func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
         // An unescaped presentation name is shorter than its wire encoding.
         // Escape-heavy names grow this slice as needed.
-        <span class="cov4" title="37">var text [maxNameWireSize]byte
-        rendered := text[:0]
-        wireLength := 0
-        off := start
+        <span class="cov4" title="37">var (
+                text       [maxNameWireSize]byte
+                rendered   = text[:0]
+                wireLength int
+                off        = start
+        )
         next = start
         ordinary = true
 </span>
@@ -283,10 +284,10 @@ func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary
 }
 
 type namePart struct {
-        offset     int
+        offset     int // wire offset of the label
         wireLength int
-        textOffset int
-        bits       int
+        textOffset int // start of this label's text in the rendered name
+        bits       int // 0 for an ordinary label, else the RFC 2673 bit count (1-256)
 }
 
 type nameSuffix struct {
@@ -295,12 +296,17 @@ type nameSuffix struct {
 }
 
 func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
-        <span class="cov9" title="21320">var partBuffer [4]namePart
-        parts := partBuffer[:0]
-        prefixWireLength := 0
-        off := start
+        <span class="cov9" title="21320">var (
+                partBuffer       [4]namePart
+                parts            = partBuffer[:0]
+                prefixWireLength int
+                tail             nameSuffix
+                terminalSize     int
+                off              = start
+        )
 </span>
-        <span class="cov9" title="21320">for </span>{
+<span class="cov9" title="21320">scan:
+        for </span>{
                 <span class="cov10" title="29548">if off &gt;= len(data) </span>{
                         <span class="cov1" title="1">err = malformed(off, "domain name is not terminated")
                         return
@@ -311,13 +317,9 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
                 switch length &amp; 0xc0 </span>{
                 case 0x00:
                         <span class="cov9" title="21339">if length == 0 </span>{
-                                <span class="cov9" title="13128">tail := nameSuffix{wireLength: 1}
-                                names[labelOffset] = tail
-                                name, err = completeName(data, parts, prefixWireLength, tail, names)
-                                if err == nil </span>{
-                                        <span class="cov9" title="13128">next = off + 1
-</span>                                }
-                                <span class="cov9" title="13128">return</span>
+                                <span class="cov9" title="13128">tail = nameSuffix{wireLength: 1}
+                                terminalSize = 1
+                                break scan</span>
                         }
 
                         <span class="cov8" title="8211">labelLength := int(length)
@@ -369,23 +371,27 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
                                 <span class="cov1" title="2">err = malformed(off, "compression pointer does not point backward")
                                 return
 </span>                        }
-                        <span class="cov8" title="8181">tail, ok := names[target]
-                        if !ok </span>{
+                        <span class="cov8" title="8181">var ok bool
+                        if tail, ok = names[target]; !ok </span>{
                                 <span class="cov2" title="4">err = malformed(off, "compression pointer target is not a prior label boundary")
                                 return
 </span>                        }
-                        <span class="cov8" title="8177">names[labelOffset] = tail
-                        name, err = completeName(data, parts, prefixWireLength, tail, names)
-                        if err == nil </span>{
-                                <span class="cov8" title="8175">next = off + 2
-</span>                        }
-                        <span class="cov8" title="8177">return</span>
+                        <span class="cov8" title="8177">terminalSize = 2
+                        break scan</span>
 
                 default:
                         <span class="cov1" title="1">err = malformed(off, "unallocated DNS label type")
                         return</span>
                 }
         }
+
+        // off is the terminal label's offset: neither terminal branch advances it.
+        <span class="cov9" title="21305">names[off] = tail
+        name, err = completeName(data, parts, prefixWireLength, tail, names)
+        if err == nil </span>{
+                <span class="cov9" title="21303">next = off + terminalSize
+</span>        }
+        <span class="cov9" title="21305">return</span>
 }
 
 func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
@@ -403,8 +409,10 @@ func completeName(data []byte, parts []namePart, prefixWireLength int, tail name
         }
         <span class="cov8" title="8183">wireLength := tail.wireLength + prefixWireLength
 </span>
-        <span class="cov8" title="8183">var text [maxNamePresentationSize]byte
-        rendered := text[:0]
+        <span class="cov8" title="8183">var (
+                text     [maxNamePresentationSize]byte
+                rendered = text[:0]
+        )
         for i := range parts </span>{
                 <span class="cov8" title="8209">part := &amp;parts[i]
                 part.textOffset = len(rendered)
@@ -454,7 +462,7 @@ func appendBitStringPresentation(text, data []byte, bits int) []byte {
         digitCount := (bits + 3) / 4
 </span>
         <span class="cov3" title="12">text = append(text, '\\', '[', 'x')
-        for i := 0; i &lt; digitCount; i++ </span>{
+        for i := range digitCount </span>{
                 <span class="cov5" title="159">value := data[i/2]
                 if i%2 == 0 </span>{
                         <span class="cov4" title="81">value &gt;&gt;= 4
