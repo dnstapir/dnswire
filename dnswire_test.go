@@ -667,7 +667,7 @@ func FuzzParse(f *testing.F) {
 		}
 		prefix, err := Parse(data[:got.Length])
 		if err != nil || !reflect.DeepEqual(got, prefix) {
-			t.Fatalf("Unpack of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
+			t.Fatalf("Parse of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
 		}
 		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {

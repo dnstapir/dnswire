@@ -47,8 +47,9 @@ worst case of RFC 1035 compression combined with presentation escaping. The
 expansion is bounded, linear, and regression-tested
 (`TestParseWorstCaseCompressionAmplification`). `Unpack` decodes every question
 before returning, so callers wanting a stricter limit must enforce it before
-calling `Unpack`, by reading the question count directly from the raw message
-(the big-endian 16-bit word at octets 4 and 5).
+calling `Unpack`: after checking the message holds at least `HeaderSize`
+octets, read the question count directly from the raw message (the big-endian
+16-bit word at octets 4 and 5).
 
 ## Verification
 
