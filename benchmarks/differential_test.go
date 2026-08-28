@@ -168,10 +168,25 @@ func presentationLabels(name string) (labels [][]byte, ok bool) {
 	return
 }
 
+// compareHeader verifies that the Header flag accessors agree with the
+// header fields miekg/dns v1 decoded. v1 folds EDNS0 extended RCODE bits
+// into Rcode when an OPT record is present, so only its low four bits count.
+func compareHeader(t *testing.T, data []byte, header dnswire.Header, v1 *dnsv1.Msg) {
+	t.Helper()
+	if header.ID != v1.Id || header.Response() != v1.Response || header.Opcode() != v1.Opcode ||
+		header.Authoritative() != v1.Authoritative || header.Truncated() != v1.Truncated ||
+		header.RecursionDesired() != v1.RecursionDesired || header.RecursionAvailable() != v1.RecursionAvailable ||
+		header.Zero() != v1.Zero || header.AuthenticatedData() != v1.AuthenticatedData ||
+		header.CheckingDisabled() != v1.CheckingDisabled || header.Rcode() != v1.Rcode&0xf {
+		t.Fatalf("Parse(%x) header = %+v, miekg/dns v1 = %+v", data, header, v1.MsgHdr)
+	}
+}
+
 // compareQuestions verifies that dnswire and miekg/dns v1 decoded the same
 // questions from data, comparing names by raw label octets.
 func compareQuestions(t *testing.T, data []byte, message dnswire.Message, v1 *dnsv1.Msg) {
 	t.Helper()
+	compareHeader(t, data, message.Header, v1)
 	i := 0
 	for question := range message.Questions {
 		if i >= len(v1.Question) {

@@ -48,6 +48,9 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	if !reflect.DeepEqual(gotQuestions, wantQuestions) {
 		t.Fatalf("Questions = %#v, want %#v", gotQuestions, wantQuestions)
 	}
+	if got.Length != len(data) {
+		t.Fatalf("Length = %d, want %d", got.Length, len(data))
+	}
 	seen := 0
 	for range got.Questions {
 		seen++
@@ -60,6 +63,55 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	}
 }
 
+func TestHeaderFlags(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags uint16
+		check func(Header) bool
+	}{
+		{"Response", 1 << 15, Header.Response},
+		{"Authoritative", 1 << 10, Header.Authoritative},
+		{"Truncated", 1 << 9, Header.Truncated},
+		{"RecursionDesired", 1 << 8, Header.RecursionDesired},
+		{"RecursionAvailable", 1 << 7, Header.RecursionAvailable},
+		{"Zero", 1 << 6, Header.Zero},
+		{"AuthenticatedData", 1 << 5, Header.AuthenticatedData},
+		{"CheckingDisabled", 1 << 4, Header.CheckingDisabled},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.check(Header{Flags: test.flags}) {
+				t.Errorf("%s(%#04x) = false, want true", test.name, test.flags)
+			}
+			if test.check(Header{Flags: ^test.flags}) {
+				t.Errorf("%s(%#04x) = true, want false", test.name, ^test.flags)
+			}
+		})
+	}
+}
+
+func TestHeaderOpcodeRcode(t *testing.T) {
+	tests := []struct {
+		flags  uint16
+		opcode int
+		rcode  int
+	}{
+		{0, 0, 0},
+		{0xffff, 15, 15},
+		{5<<11 | 3, 5, 3},
+		{1<<15 | 4<<11 | 1<<8 | 9, 4, 9},
+	}
+	for _, test := range tests {
+		header := Header{Flags: test.flags}
+		if got := header.Opcode(); got != test.opcode {
+			t.Errorf("Opcode(%#04x) = %d, want %d", test.flags, got, test.opcode)
+		}
+		if got := header.Rcode(); got != test.rcode {
+			t.Errorf("Rcode(%#04x) = %d, want %d", test.flags, got, test.rcode)
+		}
+	}
+}
+
 func TestParseNoQuestions(t *testing.T) {
 	got, err := Parse(testHeader(123, 0, 0, 0, 0, 0))
 	if err != nil {
@@ -68,8 +120,24 @@ func TestParseNoQuestions(t *testing.T) {
 	if got.Question != (Question{}) {
 		t.Fatalf("Question = %#v, want zero value", got.Question)
 	}
+	if got.Length != HeaderSize {
+		t.Fatalf("Length = %d, want %d", got.Length, HeaderSize)
+	}
 	for range got.Questions {
 		t.Fatal("message yielded a question")
+	}
+}
+
+func TestParseLengthIgnoresTrailingData(t *testing.T) {
+	data := questionPacket(wireName([]byte("example"), []byte("com")))
+	want := len(data)
+	data = append(data, 0xde, 0xad, 0xbe, 0xef)
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Length != want {
+		t.Fatalf("Length = %d, want %d", got.Length, want)
 	}
 }
 
@@ -565,6 +633,13 @@ func FuzzParse(f *testing.F) {
 		}
 		if questionCount != int(got.Header.QuestionCount) {
 			t.Fatalf("decoded %d questions, header says %d", questionCount, got.Header.QuestionCount)
+		}
+		if got.Length < HeaderSize || got.Length > len(data) {
+			t.Fatalf("Length = %d, data is %d octets", got.Length, len(data))
+		}
+		prefix, err := Parse(data[:got.Length])
+		if err != nil || !reflect.DeepEqual(got, prefix) {
+			t.Fatalf("Parse of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
 		}
 		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {
