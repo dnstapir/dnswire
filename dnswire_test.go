@@ -151,6 +151,9 @@ func TestParseCompressionPointerChain(t *testing.T) {
 		}
 		i++
 	}
+	if i != len(want) {
+		t.Fatalf("decoded %d questions, want %d", i, len(want))
+	}
 }
 
 func TestParseManyLabels(t *testing.T) {
@@ -165,6 +168,9 @@ func TestParseManyLabels(t *testing.T) {
 			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, "a.b.c.d.e.")
 		}
 		i++
+	}
+	if i != 2 {
+		t.Fatalf("decoded %d questions, want 2", i)
 	}
 }
 
@@ -313,12 +319,224 @@ func TestParseCompressedNameTooLong(t *testing.T) {
 	}
 }
 
+// TestParseCompressedNameMaxLength exercises both sides of the 255-octet
+// expanded-name limit for compressed names.
+func TestParseCompressedNameMaxLength(t *testing.T) {
+	// A 253-octet tail leaves room for exactly one 2-octet prefix label.
+	tailLabels := [][]byte{
+		bytes.Repeat([]byte{'a'}, 63),
+		bytes.Repeat([]byte{'b'}, 63),
+		bytes.Repeat([]byte{'c'}, 63),
+		bytes.Repeat([]byte{'d'}, 59),
+	}
+	tail := wireName(tailLabels...)
+
+	data := testHeader(0, 0, 2, 0, 0, 0)
+	tailOffset := len(data)
+	data = append(data, tail...)
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	data = append(data, 1, 'x', 0xc0, byte(tailOffset))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatalf("255-octet compressed name: %v", err)
+	}
+	tailName := testPresentationName(tailLabels...)
+	if got.Question.Name != tailName {
+		t.Fatalf("Questions[0].Name = %q, want %q", got.Question.Name, tailName)
+	}
+	var last string
+	for question := range got.Questions {
+		last = question.Name
+	}
+	if want := "x." + tailName; last != want {
+		t.Fatalf("Name = %q, want %q", last, want)
+	}
+
+	data = testHeader(0, 0, 2, 0, 0, 0)
+	data = append(data, tail...)
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	data = append(data, 2, 'x', 'y', 0xc0, byte(tailOffset))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	if _, err = Parse(data); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("256-octet compressed name error = %v, want ErrMalformed", err)
+	}
+}
+
+// TestParsePointerToBitStringBoundary verifies that compression pointers may
+// target bit-string label boundaries of a prior name.
+func TestParsePointerToBitStringBoundary(t *testing.T) {
+	data := testHeader(0, 0, 3, 0, 0, 0)
+	bitString := len(data)
+	data = append(data, 0x41, 14, 0xd0, 0x74)
+	com := len(data)
+	data = append(data, 3, 'c', 'o', 'm', 0)
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	data = append(data, 0xc0, byte(bitString))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	data = append(data, 0xc0, byte(com))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`\[xd074/14].com.`, `\[xd074/14].com.`, "com."}
+	i := 0
+	for question := range got.Questions {
+		if question.Name != want[i] {
+			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, want[i])
+		}
+		i++
+	}
+	if i != len(want) {
+		t.Fatalf("decoded %d questions, want %d", i, len(want))
+	}
+}
+
+// TestParsePointerToLabelInterior verifies that a compression pointer into
+// the interior of a decoded label is rejected.
+func TestParsePointerToLabelInterior(t *testing.T) {
+	data := testHeader(0, 0, 2, 0, 0, 0)
+	firstName := len(data)
+	data = append(data, wireName([]byte("example"), []byte("com"))...)
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+	data = append(data, 0xc0, byte(firstName+1))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+
+	got, err := Parse(data)
+	if !errors.Is(err, ErrMalformed) {
+		t.Fatalf("error = %v, want ErrMalformed", err)
+	}
+	if !reflect.DeepEqual(got, Message{}) {
+		t.Fatalf("Message = %#v, want zero value", got)
+	}
+}
+
+// TestParsePointerWithinOwnName verifies that a pointer to an earlier label
+// of the name still being decoded is rejected: it would loop, and that label
+// is not a completed boundary.
+func TestParsePointerWithinOwnName(t *testing.T) {
+	data := testHeader(0, 0, 1, 0, 0, 0)
+	nameStart := len(data)
+	data = append(data, 1, 'a', 1, 'b', 0xc0, byte(nameStart+2))
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+
+	got, err := Parse(data)
+	if !errors.Is(err, ErrMalformed) {
+		t.Fatalf("error = %v, want ErrMalformed", err)
+	}
+	if !reflect.DeepEqual(got, Message{}) {
+		t.Fatalf("Message = %#v, want zero value", got)
+	}
+}
+
+// TestParseMaxQuestionCount parses the largest question count that can fit
+// in a maximum-size message and rejects a count of one more.
+func TestParseMaxQuestionCount(t *testing.T) {
+	const count = (maxMessageSize - HeaderSize) / 5
+	data := testHeader(0, 0, count, 0, 0, 0)
+	for range count {
+		data = append(data, 0)
+		data = appendUint16(data, 1)
+		data = appendUint16(data, 1)
+	}
+
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for question := range got.Questions {
+		if question.Name != "." {
+			t.Fatalf("Questions[%d].Name = %q, want %q", seen, question.Name, ".")
+		}
+		seen++
+	}
+	if seen != count {
+		t.Fatalf("decoded %d questions, want %d", seen, count)
+	}
+
+	binary.BigEndian.PutUint16(data[4:6], count+1)
+	if _, err = Parse(data); !errors.Is(err, ErrMalformed) {
+		t.Fatalf("question count %d error = %v, want ErrMalformed", count+1, err)
+	}
+}
+
+// TestParseWorstCaseCompressionAmplification fills a maximum-size message
+// with escape-heavy compressed names: each 8-octet question decodes to a name
+// near the 1020-octet presentation limit. Parse must stay linear and every
+// name must decode correctly.
+func TestParseWorstCaseCompressionAmplification(t *testing.T) {
+	tailLabels := [][]byte{
+		bytes.Repeat([]byte{0}, 63),
+		bytes.Repeat([]byte{0}, 63),
+		bytes.Repeat([]byte{0}, 63),
+		bytes.Repeat([]byte{0}, 59),
+	}
+	data := testHeader(0, 0, 0, 0, 0, 0)
+	tailOffset := len(data)
+	data = append(data, wireName(tailLabels...)...)
+	data = appendUint16(data, 1)
+	data = appendUint16(data, 1)
+
+	tailName := testPresentationName(tailLabels...)
+	wantName := `\000.` + tailName
+	questions := 1
+	for len(data)+8 <= maxMessageSize {
+		data = append(data, 1, 0, 0xc0, byte(tailOffset))
+		data = appendUint16(data, 1)
+		data = appendUint16(data, 1)
+		questions++
+	}
+	binary.BigEndian.PutUint16(data[4:6], uint16(questions))
+
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for question := range got.Questions {
+		want := wantName
+		if seen == 0 {
+			want = tailName
+		}
+		if question.Name != want {
+			t.Fatalf("Questions[%d].Name = %q, want %q", seen, question.Name, want)
+		}
+		if len(question.Name) > maxNamePresentationSize {
+			t.Fatalf("Questions[%d].Name is %d octets, exceeding %d", seen, len(question.Name), maxNamePresentationSize)
+		}
+		seen++
+	}
+	if seen != questions {
+		t.Fatalf("decoded %d questions, want %d", seen, questions)
+	}
+}
+
+// FuzzParse checks Parse's invariants on arbitrary input: stable error
+// identities, a zero Message on error, input immutability, absolute names
+// within the presentation-size bound, question-count agreement with the
+// header, and determinism.
 func FuzzParse(f *testing.F) {
 	f.Add([]byte(nil))
 	f.Add(questionPacket(wireName([]byte("example"), []byte("com"))))
 	f.Add(questionPacket(wireName([]byte("a.b"), []byte{0, 255})))
 	f.Add(questionPacket([]byte{0x41, 14, 0xd0, 0x74, 0}))
 	f.Add(questionPacket([]byte{0xc0, 0x0c}))
+	f.Add(compressedQuestionPair([]byte{0x41, 14, 0xd0, 0x74, 3, 'c', 'o', 'm', 0}))
+	f.Add(append(testHeader(0, 0, 1, 0, 0, 0), 1, 'a', 1, 'b', 0xc0, HeaderSize+2, 0, 1, 0, 1))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		before := bytes.Clone(data)
@@ -330,6 +548,9 @@ func FuzzParse(f *testing.F) {
 			if !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupportedLabel) {
 				t.Fatalf("unexpected error identity: %v", err)
 			}
+			if !reflect.DeepEqual(got, Message{}) {
+				t.Fatalf("Message = %#v, want zero value on error", got)
+			}
 			return
 		}
 		questionCount := 0
@@ -337,6 +558,9 @@ func FuzzParse(f *testing.F) {
 			questionCount++
 			if !strings.HasSuffix(question.Name, ".") {
 				t.Fatalf("non-absolute decoded name %q", question.Name)
+			}
+			if len(question.Name) > maxNamePresentationSize {
+				t.Fatalf("decoded name is %d octets, exceeding %d", len(question.Name), maxNamePresentationSize)
 			}
 		}
 		if questionCount != int(got.Header.QuestionCount) {

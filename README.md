@@ -42,6 +42,40 @@ forward or invalid compression targets, and returns no partial result.
 RFC 6891 deprecates RFC 2673 binary labels and forbids generating or passing
 them. This package decodes but does not generate them.
 
+## Differences from miekg/dns
+
+`dnswire` decodes only the header and question section and is built for
+adversarial input; miekg/dns v1 and v2 are full message codecs. As observed
+against miekg/dns v1.1.72 and v2 v0.6.101:
+
+- **Name fidelity.** `dnswire` and v1 both decode question names to RFC 1035
+  presentation format preserving every octet and label boundary, with
+  slightly different but equally legal escape sets. v2 intentionally does not
+  decode legacy QNAMEs, and its presentation names may be lossy.
+- **Legacy labels.** `dnswire` decodes historic RFC 2673 binary (bit-string)
+  labels; v1 and v2 reject them.
+- **Truncated questions.** `dnswire` rejects a question whose type or class
+  is cut off; v1 and v2 accept it, with v1 returning zero values for the
+  missing fields.
+- **Compression pointers.** `dnswire` follows a pointer only to a prior label
+  boundary it has already decoded, as RFC 1035 section 4.1.4 requires; v1 and
+  v2 follow any backward pointer, including into the header or a label's
+  interior.
+- **Message size.** `dnswire` rejects input over the 65535-octet DNS message
+  limit up front; v1 and v2 accept oversized input.
+- **Errors.** `dnswire` reports every failure through the matchable
+  sentinels `ErrMalformed` and `ErrUnsupportedLabel` and returns a zero
+  `Message` alongside any error.
+
+`benchmarks/differential_test.go` cross-checks `dnswire` against v1 on
+generated legal messages and random mutations of them; whenever both accept a
+message they must decode identical questions.
+
+## Security
+
+`Parse` is designed for adversarial input. [SECURITY.md](SECURITY.md)
+describes its guarantees, resource characteristics, and verification.
+
 ## Benchmarks
 
 The `benchmarks` module uses the miekg/dns versions used by EDM. The parser
