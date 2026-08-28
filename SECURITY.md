@@ -45,9 +45,10 @@ A maximally hostile 65535-octet message can legally expand to roughly 8 MB of
 transient decoded name strings (about a 125x amplification) — the inherent
 worst case of RFC 1035 compression combined with presentation escaping. The
 expansion is bounded, linear, and regression-tested
-(`TestParseWorstCaseCompressionAmplification`). Callers parsing untrusted
-messages at high rates can enforce a lower bound by checking
-`Header.QuestionCount` before iterating `Questions`.
+(`TestParseWorstCaseCompressionAmplification`). `Parse` decodes every question
+before returning, so callers wanting a stricter limit must enforce it before
+calling `Parse`, by reading the question count directly from the raw message
+(the big-endian 16-bit word at octets 4 and 5).
 
 ## Verification
 

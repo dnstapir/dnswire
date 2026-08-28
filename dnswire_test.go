@@ -151,6 +151,9 @@ func TestParseCompressionPointerChain(t *testing.T) {
 		}
 		i++
 	}
+	if i != len(want) {
+		t.Fatalf("decoded %d questions, want %d", i, len(want))
+	}
 }
 
 func TestParseManyLabels(t *testing.T) {
@@ -165,6 +168,9 @@ func TestParseManyLabels(t *testing.T) {
 			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, "a.b.c.d.e.")
 		}
 		i++
+	}
+	if i != 2 {
+		t.Fatalf("decoded %d questions, want 2", i)
 	}
 }
 
@@ -313,6 +319,8 @@ func TestParseCompressedNameTooLong(t *testing.T) {
 	}
 }
 
+// TestParseCompressedNameMaxLength exercises both sides of the 255-octet
+// expanded-name limit for compressed names.
 func TestParseCompressedNameMaxLength(t *testing.T) {
 	// A 253-octet tail leaves room for exactly one 2-octet prefix label.
 	tailLabels := [][]byte{
@@ -360,6 +368,8 @@ func TestParseCompressedNameMaxLength(t *testing.T) {
 	}
 }
 
+// TestParsePointerToBitStringBoundary verifies that compression pointers may
+// target bit-string label boundaries of a prior name.
 func TestParsePointerToBitStringBoundary(t *testing.T) {
 	data := testHeader(0, 0, 3, 0, 0, 0)
 	bitString := len(data)
@@ -387,8 +397,13 @@ func TestParsePointerToBitStringBoundary(t *testing.T) {
 		}
 		i++
 	}
+	if i != len(want) {
+		t.Fatalf("decoded %d questions, want %d", i, len(want))
+	}
 }
 
+// TestParsePointerToLabelInterior verifies that a compression pointer into
+// the interior of a decoded label is rejected.
 func TestParsePointerToLabelInterior(t *testing.T) {
 	data := testHeader(0, 0, 2, 0, 0, 0)
 	firstName := len(data)
@@ -408,9 +423,10 @@ func TestParsePointerToLabelInterior(t *testing.T) {
 	}
 }
 
+// TestParsePointerWithinOwnName verifies that a pointer to an earlier label
+// of the name still being decoded is rejected: it would loop, and that label
+// is not a completed boundary.
 func TestParsePointerWithinOwnName(t *testing.T) {
-	// A pointer to an earlier label of the name still being decoded would
-	// loop; that label is not a completed boundary, so it must be rejected.
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	nameStart := len(data)
 	data = append(data, 1, 'a', 1, 'b', 0xc0, byte(nameStart+2))
@@ -426,6 +442,8 @@ func TestParsePointerWithinOwnName(t *testing.T) {
 	}
 }
 
+// TestParseMaxQuestionCount parses the largest question count that can fit
+// in a maximum-size message and rejects a count of one more.
 func TestParseMaxQuestionCount(t *testing.T) {
 	const count = (maxMessageSize - HeaderSize) / 5
 	data := testHeader(0, 0, count, 0, 0, 0)
@@ -456,10 +474,11 @@ func TestParseMaxQuestionCount(t *testing.T) {
 	}
 }
 
+// TestParseWorstCaseCompressionAmplification fills a maximum-size message
+// with escape-heavy compressed names: each 8-octet question decodes to a name
+// near the 1020-octet presentation limit. Parse must stay linear and every
+// name must decode correctly.
 func TestParseWorstCaseCompressionAmplification(t *testing.T) {
-	// Fill a maximum-size message with escape-heavy compressed names: each
-	// 8-octet question decodes to a name near the 1020-octet presentation
-	// limit. Parse must stay linear and every name must decode correctly.
 	tailLabels := [][]byte{
 		bytes.Repeat([]byte{0}, 63),
 		bytes.Repeat([]byte{0}, 63),
@@ -506,6 +525,10 @@ func TestParseWorstCaseCompressionAmplification(t *testing.T) {
 	}
 }
 
+// FuzzParse checks Parse's invariants on arbitrary input: stable error
+// identities, a zero Message on error, input immutability, absolute names
+// within the presentation-size bound, question-count agreement with the
+// header, and determinism.
 func FuzzParse(f *testing.F) {
 	f.Add([]byte(nil))
 	f.Add(questionPacket(wireName([]byte("example"), []byte("com"))))

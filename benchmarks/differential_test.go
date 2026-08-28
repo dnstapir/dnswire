@@ -216,6 +216,9 @@ func differential(t *testing.T, data []byte) {
 	}
 }
 
+// TestParseLegalMessages verifies that Parse accepts every generated
+// spec-legal message and decodes the names the oracle expects, cross-checked
+// against miekg/dns v1 where it accepts the same message.
 func TestParseLegalMessages(t *testing.T) {
 	r := rand.New(rand.NewPCG(2026, 8))
 	for range 100_000 {
@@ -241,6 +244,8 @@ func TestParseLegalMessages(t *testing.T) {
 	}
 }
 
+// TestParseMutationDifferential runs the differential comparison on random
+// mutations of legal messages, deterministically seeded.
 func TestParseMutationDifferential(t *testing.T) {
 	r := rand.New(rand.NewPCG(2026, 28))
 	seeds := make([][]byte, 40)
@@ -263,6 +268,8 @@ func TestParseMutationDifferential(t *testing.T) {
 	}
 }
 
+// FuzzParseDifferential fuzzes the differential comparison against miekg/dns
+// v1 starting from generated legal messages.
 func FuzzParseDifferential(f *testing.F) {
 	r := rand.New(rand.NewPCG(20, 26))
 	for range 8 {
