@@ -121,7 +121,9 @@ func Parse(data []byte) (message Message, err error) {
 }
 
 func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
-	var text [maxNamePresentationSize]byte
+	// An unescaped presentation name is shorter than its wire encoding.
+	// Escape-heavy names grow this slice as needed.
+	var text [maxNameWireSize]byte
 	rendered := text[:0]
 	wireLength := 0
 	off := start
@@ -168,11 +170,10 @@ func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary
 }
 
 type namePart struct {
-	offset           uint16
-	wireLength       uint16
-	suffixWireLength uint16
-	textOffset       uint16
-	bits             uint16
+	offset     int
+	wireLength int
+	textOffset int
+	bits       int
 }
 
 type nameSuffix struct {
@@ -199,10 +200,8 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 			if length == 0 {
 				tail := nameSuffix{wireLength: 1}
 				names[labelOffset] = tail
-				var result nameSuffix
-				result, err = completeName(data, parts, tail, names)
+				name, err = completeName(data, parts, prefixWireLength, tail, names)
 				if err == nil {
-					name = presentationName(result)
 					next = off + 1
 				}
 				return
@@ -220,8 +219,8 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				return
 			}
 			parts = append(parts, namePart{
-				offset:     uint16(labelOffset),     // #nosec G115 -- data is limited to 65535 octets.
-				wireLength: uint16(1 + labelLength), // #nosec G115 -- ordinary labels are at most 63 octets.
+				offset:     labelOffset,
+				wireLength: 1 + labelLength,
 			})
 			off = end
 
@@ -230,20 +229,21 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				err = unsupportedLabel(off, length)
 				return
 			}
-			var bits, wireLength int
-			bits, wireLength, off, err = unpackBitStringLabel(data, off)
+			var bits int
+			bits, off, err = unpackBitStringLabel(data, off)
 			if err != nil {
 				return
 			}
+			wireLength := off - labelOffset
 			prefixWireLength += wireLength
 			if prefixWireLength >= maxNameWireSize {
 				err = malformed(start, "domain name exceeds 255 octets")
 				return
 			}
 			parts = append(parts, namePart{
-				offset:     uint16(labelOffset), // #nosec G115 -- data is limited to 65535 octets.
-				wireLength: uint16(wireLength),  // #nosec G115 -- bit-string labels are at most 34 octets.
-				bits:       uint16(bits),        // #nosec G115 -- bit-string labels are at most 256 bits.
+				offset:     labelOffset,
+				wireLength: wireLength,
+				bits:       bits,
 			})
 
 		case 0xc0:
@@ -262,10 +262,8 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 				return
 			}
 			names[labelOffset] = tail
-			var result nameSuffix
-			result, err = completeName(data, parts, tail, names)
+			name, err = completeName(data, parts, prefixWireLength, tail, names)
 			if err == nil {
-				name = presentationName(result)
 				next = off + 2
 			}
 			return
@@ -277,19 +275,18 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 	}
 }
 
-func completeName(data []byte, parts []namePart, tail nameSuffix, names map[int]nameSuffix) (result nameSuffix, err error) {
-	result = tail
-	for i := len(parts) - 1; i >= 0; i-- {
-		wireLength := int(parts[i].wireLength)
-		if wireLength > maxNameWireSize-result.wireLength {
-			err = malformed(int(parts[i].offset), "domain name exceeds 255 octets")
-			return
-		}
-		result.wireLength += wireLength
-		parts[i].suffixWireLength = uint16(result.wireLength) // #nosec G115 -- the checked limit is 255 octets.
+func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
+	if prefixWireLength > maxNameWireSize-tail.wireLength {
+		err = malformed(parts[0].offset, "domain name exceeds 255 octets")
+		return
 	}
+	wireLength := tail.wireLength + prefixWireLength
 
 	if len(parts) == 0 {
+		name = tail.text
+		if name == "" {
+			name = "."
+		}
 		return
 	}
 
@@ -297,38 +294,32 @@ func completeName(data []byte, parts []namePart, tail nameSuffix, names map[int]
 	rendered := text[:0]
 	for i := range parts {
 		part := &parts[i]
-		part.textOffset = uint16(len(rendered)) // #nosec G115 -- presentation names are bounded by 1020 octets.
-		off := int(part.offset)
+		part.textOffset = len(rendered)
+		off := part.offset
 		if part.bits == 0 {
 			labelLength := int(data[off])
 			rendered = appendEscapedLabel(rendered, data[off+1:off+1+labelLength])
 		} else {
-			bits := int(part.bits)
+			bits := part.bits
 			byteCount := (bits + 7) / 8
 			rendered = appendBitStringPresentation(rendered, data[off+2:off+2+byteCount], bits)
 		}
 		rendered = append(rendered, '.')
 	}
 	rendered = append(rendered, tail.text...)
-	result.text = string(rendered)
+	name = string(rendered)
 
 	for _, part := range parts {
-		names[int(part.offset)] = nameSuffix{
-			text:       result.text[int(part.textOffset):],
-			wireLength: int(part.suffixWireLength),
+		names[part.offset] = nameSuffix{
+			text:       name[part.textOffset:],
+			wireLength: wireLength,
 		}
+		wireLength -= part.wireLength
 	}
 	return
 }
 
-func presentationName(name nameSuffix) string {
-	if name.text == "" {
-		return "."
-	}
-	return name.text
-}
-
-func unpackBitStringLabel(data []byte, off int) (bits int, wireLength int, next int, err error) {
+func unpackBitStringLabel(data []byte, off int) (bits int, next int, err error) {
 	if off+1 >= len(data) {
 		err = malformed(off, "bit-string label has no bit count")
 		return
@@ -344,7 +335,6 @@ func unpackBitStringLabel(data []byte, off int) (bits int, wireLength int, next 
 		return
 	}
 
-	wireLength = 2 + byteCount
 	return
 }
 
@@ -371,6 +361,20 @@ func appendBitStringPresentation(text, data []byte, bits int) []byte {
 }
 
 func appendEscapedLabel(text, label []byte) []byte {
+	for _, value := range label {
+		switch value {
+		case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
+			return appendEscapedLabelSlow(text, label)
+		default:
+			if value < ' ' || value > '~' {
+				return appendEscapedLabelSlow(text, label)
+			}
+		}
+	}
+	return append(text, label...)
+}
+
+func appendEscapedLabelSlow(text, label []byte) []byte {
 	for _, value := range label {
 		switch value {
 		case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':

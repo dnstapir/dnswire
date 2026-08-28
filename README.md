@@ -45,6 +45,15 @@ not generate DNS messages.
 Comparative benchmarks use the miekg/dns versions used by EDM. These are
 benchmark-only dependencies; the parser package imports neither version.
 
+The typical input is one question with an uncompressed name that needs no
+presentation escaping. [RFC 9619](https://www.rfc-editor.org/rfc/rfc9619.html)
+limits ordinary QUERY messages to at most one question. A
+[26-billion-query-pair measurement](https://users.cs.northwestern.edu/~ychen/Papers/DNS_ToN15.pdf)
+found bytes outside the alphanumeric-and-hyphen class in 0.2% of queries at
+global recursive resolvers. Names needing presentation escaping are a subset
+of that group; this parser still accepts and losslessly escapes those legal
+octets.
+
 ```sh
 go test -run=^$ -bench=. -benchmem -count=10
 ```
@@ -62,12 +71,12 @@ using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of ten runs.
 
 | Input | Parser | ns/op | B/op | allocs/op |
 | --- | --- | ---: | ---: | ---: |
-| Typical | dnswire | 41.75 | 40 | 2 |
-| Typical | miekg/dns v1 | 54.36 | 40 | 2 |
-| Typical | miekg/dns v2 | 48.29 | 80 | 3 |
-| Unusual legal octets | dnswire | 45.70 | 72 | 2 |
-| Unusual legal octets | miekg/dns v1 | 67.31 | 72 | 2 |
-| Unusual legal octets | miekg/dns v2 | 47.04 | 88 | 3 |
-| Three compressed questions | dnswire | 115.9 | 104 | 3 |
-| Three compressed questions | miekg/dns v1 | 137.6 | 208 | 6 |
-| Three compressed questions | miekg/dns v2 | 141.7 | 296 | 9 |
+| Typical | dnswire | 37.63 | 40 | 2 |
+| Typical | miekg/dns v1 | 54.51 | 40 | 2 |
+| Typical | miekg/dns v2 | 47.41 | 80 | 3 |
+| Unusual legal octets | dnswire | 40.74 | 72 | 2 |
+| Unusual legal octets | miekg/dns v1 | 66.61 | 72 | 2 |
+| Unusual legal octets | miekg/dns v2 | 46.97 | 88 | 3 |
+| Three compressed questions | dnswire | 110.6 | 104 | 3 |
+| Three compressed questions | miekg/dns v1 | 139.3 | 208 | 6 |
+| Three compressed questions | miekg/dns v2 | 138.5 | 296 | 9 |

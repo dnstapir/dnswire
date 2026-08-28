@@ -58,6 +58,19 @@ func TestParsePresentationNames(t *testing.T) {
 		{name: "special ASCII", labels: [][]byte{[]byte("a b'@;()\"")}, want: `a\ b\'\@\;\(\)\".`},
 		{name: "control octets", labels: [][]byte{{0, 7, 9, 10, 31}}, want: `\000\007\009\010\031.`},
 		{name: "high octets", labels: [][]byte{{127, 128, 173, 239, 255}, []byte("example")}, want: `\127\128\173\239\255.example.`},
+		{
+			name: "maximum escaped name",
+			labels: [][]byte{
+				bytes.Repeat([]byte{0}, 63),
+				bytes.Repeat([]byte{0}, 63),
+				bytes.Repeat([]byte{0}, 63),
+				bytes.Repeat([]byte{0}, 61),
+			},
+			want: strings.Repeat(`\000`, 63) + "." +
+				strings.Repeat(`\000`, 63) + "." +
+				strings.Repeat(`\000`, 63) + "." +
+				strings.Repeat(`\000`, 61) + ".",
+		},
 	}
 
 	for _, test := range tests {
