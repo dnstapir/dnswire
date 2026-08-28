@@ -34,6 +34,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Smoke-test benchmarks
+        working-directory: benchmarks
         run: go test -run=^$ -bench=. -benchtime=1x ./...
 
       - name: Calculate code coverage

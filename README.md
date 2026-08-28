@@ -44,10 +44,11 @@ them. This package decodes but does not generate them.
 
 ## Benchmarks
 
-Comparative benchmarks use the miekg/dns versions used by EDM. These are
-benchmark-only dependencies; the parser package imports neither version.
+The `benchmarks` module uses the miekg/dns versions used by EDM. The parser
+module uses only the standard library.
 
 ```sh
+cd benchmarks
 go test -run=^$ -bench=. -benchmem -count=10
 ```
 
