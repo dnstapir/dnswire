@@ -90,6 +90,7 @@ func Parse(data []byte) (message Message, err error) {
 		AdditionalCount: binary.BigEndian.Uint16(data[10:12]),
 	}
 
+	// Each question needs at least a root label octet plus 16-bit type and class.
 	questionCount := int(message.Header.QuestionCount)
 	if questionCount > (len(data)-HeaderSize)/5 {
 		message = Message{}
@@ -97,15 +98,13 @@ func Parse(data []byte) (message Message, err error) {
 		return
 	}
 
-	if questionCount > 1 {
-		message.moreQuestions = make([]Question, 0, questionCount-1)
-	}
 	var names map[int]nameSuffix
 	if questionCount > 1 {
+		message.moreQuestions = make([]Question, 0, questionCount-1)
 		names = make(map[int]nameSuffix)
 	}
 	off := HeaderSize
-	for i := 0; i < questionCount; i++ {
+	for i := range questionCount {
 		var question Question
 		ordinary := false
 		if questionCount == 1 {
@@ -296,11 +295,10 @@ func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, 
 
 func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
 	if prefixWireLength > maxNameWireSize-tail.wireLength {
+		// prefixWireLength is nonzero only when parts is non-empty.
 		err = malformed(parts[0].offset, "domain name exceeds 255 octets")
 		return
 	}
-	wireLength := tail.wireLength + prefixWireLength
-
 	if len(parts) == 0 {
 		name = tail.text
 		if name == "" {
@@ -308,6 +306,7 @@ func completeName(data []byte, parts []namePart, prefixWireLength int, tail name
 		}
 		return
 	}
+	wireLength := tail.wireLength + prefixWireLength
 
 	var text [maxNamePresentationSize]byte
 	rendered := text[:0]
@@ -351,9 +350,7 @@ func unpackBitStringLabel(data []byte, off int) (bits int, next int, err error) 
 	next = off + 2 + byteCount
 	if next > len(data) {
 		err = malformed(off, "bit-string label is truncated")
-		return
 	}
-
 	return
 }
 
