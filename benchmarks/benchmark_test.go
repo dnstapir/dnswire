@@ -1,4 +1,4 @@
-package dnswire_test
+package benchmarks_test
 
 import (
 	"encoding/binary"
