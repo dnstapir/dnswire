@@ -85,7 +85,7 @@ type Question struct {
 type Message struct {
 	Header   Header
 	Question Question // First question; zero when Header.QuestionCount is zero.
-	// Length is the number of octets Parse consumed: the header plus the
+	// Length is the number of octets Unpack consumed: the header plus the
 	// complete question section. Records begin at data[Length:].
 	Length        int
 	moreQuestions []Question
@@ -103,16 +103,18 @@ func (message Message) Questions(yield func(Question) bool) {
 	}
 }
 
-// Parse decodes a DNS header and every question from data.
+// Unpack decodes a DNS header and every question from data into message,
+// overwriting it entirely.
 //
 // Names use RFC 1035 presentation escaping, preserving every ordinary-label
 // octet and every label boundary. Historic RFC 2673 bit-string labels use
 // their hexadecimal presentation form. Compression pointers must refer to a
 // previously decoded label boundary.
 //
-// Parse does not inspect or validate answer, authority, or additional
-// sections. It returns a zero Message on error and never retains data.
-func Parse(data []byte) (message Message, err error) {
+// Unpack does not inspect or validate answer, authority, or additional
+// sections. It leaves a zero Message on error and never retains data.
+func (message *Message) Unpack(data []byte) (err error) {
+	*message = Message{}
 	if len(data) < HeaderSize {
 		err = malformed(len(data), "header is shorter than 12 octets")
 		return
@@ -134,7 +136,7 @@ func Parse(data []byte) (message Message, err error) {
 	// Each question needs at least a root label octet plus 16-bit type and class.
 	questionCount := int(message.Header.QuestionCount)
 	if questionCount > (len(data)-HeaderSize)/5 {
-		message = Message{}
+		*message = Message{}
 		err = malformed(HeaderSize, "question count cannot fit in message")
 		return
 	}
@@ -149,7 +151,7 @@ func Parse(data []byte) (message Message, err error) {
 		var question Question
 		question, off, names, err = unpackQuestion(data, off, names)
 		if err != nil {
-			message = Message{}
+			*message = Message{}
 			err = fmt.Errorf("question %d: %w", i, err)
 			return
 		}

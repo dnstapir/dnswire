@@ -1,12 +1,12 @@
 # Security
 
-`dnswire` parses untrusted DNS messages. `Parse` is designed and verified to
+`dnswire` parses untrusted DNS messages. `Message.Unpack` is designed and verified to
 be safe on adversarial binary input. This document summarizes its guarantees,
 resource characteristics, and verification. Last full audit: 2026-08-28.
 
 ## Guarantees
 
-On any input, `Parse`:
+On any input, `Unpack`:
 
 - never panics, never modifies the input, and never retains references to it;
 - runs in a single pass, with work and memory linear in the input size;
@@ -34,7 +34,7 @@ the same name".
 
 Within its scope (header and question section), no legal encoding is known to
 be rejected or decoded incorrectly, including legacy RFC 2673 binary
-(bit-string) labels. Messages that `Parse` rejects but lenient parsers accept
+(bit-string) labels. Messages that `Unpack` rejects but lenient parsers accept
 were adjudicated case by case during the audit; all were spec-illegal
 (truncated question fields, or compression pointers into bytes that are not a
 prior name occurrence).
@@ -45,9 +45,9 @@ A maximally hostile 65535-octet message can legally expand to roughly 8 MB of
 transient decoded name strings (about a 125x amplification) — the inherent
 worst case of RFC 1035 compression combined with presentation escaping. The
 expansion is bounded, linear, and regression-tested
-(`TestParseWorstCaseCompressionAmplification`). `Parse` decodes every question
+(`TestParseWorstCaseCompressionAmplification`). `Unpack` decodes every question
 before returning, so callers wanting a stricter limit must enforce it before
-calling `Parse`, by reading the question count directly from the raw message
+calling `Unpack`, by reading the question count directly from the raw message
 (the big-endian 16-bit word at octets 4 and 5).
 
 ## Verification
