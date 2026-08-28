@@ -1,0 +1,530 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>dnswire: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/dnstapir/dnswire/dnswire.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Package dnswire parses DNS headers and question sections.
+package dnswire
+
+import (
+        "encoding/binary"
+        "errors"
+        "fmt"
+        "strconv"
+)
+
+// HeaderSize is the size of a DNS message header in octets.
+const HeaderSize = 12
+
+const (
+        maxMessageSize          = 1&lt;&lt;16 - 1
+        maxNameWireSize         = 255
+        maxNamePresentationSize = 4 * maxNameWireSize
+)
+
+var (
+        // ErrMalformed reports an invalid DNS header or question section.
+        ErrMalformed = errors.New("dnswire: malformed DNS message")
+
+        // ErrUnsupportedLabel reports a DNS label type the parser cannot decode.
+        ErrUnsupportedLabel = errors.New("dnswire: unsupported DNS label type")
+)
+
+// Header contains the six 16-bit words in a DNS message header.
+type Header struct {
+        ID              uint16
+        Flags           uint16
+        QuestionCount   uint16
+        AnswerCount     uint16
+        AuthorityCount  uint16
+        AdditionalCount uint16
+}
+
+// Question contains one decoded DNS question.
+type Question struct {
+        // Name is an absolute RFC presentation-format domain name.
+        Name  string
+        Type  uint16
+        Class uint16
+}
+
+// Message contains a DNS header and its questions.
+type Message struct {
+        Header        Header
+        Question      Question // First question; zero when Header.QuestionCount is zero.
+        moreQuestions []Question
+}
+
+// Questions yields every decoded question in wire order.
+func (message Message) Questions(yield func(Question) bool) {
+        <span class="cov4" title="19">if message.Header.QuestionCount == 0 || !yield(message.Question) </span>{
+                <span class="cov1" title="1">return
+</span>        }
+        <span class="cov4" title="18">for _, question := range message.moreQuestions </span>{
+                <span class="cov4" title="13">if !yield(question) </span>{
+                        <span class="cov1" title="1">return
+</span>                }
+        }
+}
+
+// Parse decodes a DNS header and every question from data.
+//
+// Names use RFC 1035 presentation escaping, preserving every ordinary-label
+// octet and every label boundary. Historic RFC 2673 bit-string labels use
+// their hexadecimal presentation form. Compression pointers must refer to a
+// previously decoded label boundary.
+//
+// Parse does not inspect or validate answer, authority, or additional
+// sections. It returns a zero Message on error and never retains data.
+func Parse(data []byte) (message Message, err error) {
+        <span class="cov6" title="54">if len(data) &lt; HeaderSize </span>{
+                <span class="cov1" title="2">err = malformed(len(data), "header is shorter than 12 octets")
+                return
+</span>        }
+        <span class="cov6" title="52">if len(data) &gt; maxMessageSize </span>{
+                <span class="cov1" title="1">err = malformed(maxMessageSize, "message exceeds 65535 octets")
+                return
+</span>        }
+
+        <span class="cov6" title="51">message.Header = Header{
+                ID:              binary.BigEndian.Uint16(data[0:2]),
+                Flags:           binary.BigEndian.Uint16(data[2:4]),
+                QuestionCount:   binary.BigEndian.Uint16(data[4:6]),
+                AnswerCount:     binary.BigEndian.Uint16(data[6:8]),
+                AuthorityCount:  binary.BigEndian.Uint16(data[8:10]),
+                AdditionalCount: binary.BigEndian.Uint16(data[10:12]),
+</span>        }
+
+        <span class="cov6" title="51">questionCount := int(message.Header.QuestionCount)
+        if questionCount &gt; (len(data)-HeaderSize)/5 </span>{
+                <span class="cov1" title="1">message = Message{}
+                err = malformed(HeaderSize, "question count cannot fit in message")
+                return
+</span>        }
+
+        <span class="cov6" title="50">if questionCount &gt; 1 </span>{
+                <span class="cov4" title="14">message.moreQuestions = make([]Question, 0, questionCount-1)
+</span>        }
+        <span class="cov6" title="50">var names map[int]nameSuffix
+        if questionCount &gt; 1 </span>{
+                <span class="cov4" title="14">names = make(map[int]nameSuffix)
+</span>        }
+        <span class="cov6" title="50">off := HeaderSize
+        for i := 0; i &lt; questionCount; i++ </span>{
+                <span class="cov6" title="62">var question Question
+                ordinary := false
+                if questionCount == 1 </span>{
+                        <span class="cov5" title="35">question.Name, off, ordinary, err = unpackOrdinaryName(data, off)
+</span>                }
+                <span class="cov6" title="62">if err == nil &amp;&amp; !ordinary </span>{
+                        <span class="cov6" title="42">if names == nil </span>{
+                                <span class="cov4" title="15">names = make(map[int]nameSuffix)
+</span>                        }
+                        <span class="cov6" title="42">question.Name, off, err = unpackName(data, off, names)</span>
+                }
+                <span class="cov6" title="62">if err == nil &amp;&amp; off+4 &gt; len(data) </span>{
+                        <span class="cov1" title="1">err = malformed(off, "question type or class is truncated")
+</span>                }
+                <span class="cov6" title="62">if err == nil </span>{
+                        <span class="cov6" title="45">question.Type = binary.BigEndian.Uint16(data[off : off+2])
+                        question.Class = binary.BigEndian.Uint16(data[off+2 : off+4])
+                        off += 4
+                        if i == 0 </span>{
+                                <span class="cov5" title="33">message.Question = question
+</span>                        } else {
+                                <span class="cov4" title="12">message.moreQuestions = append(message.moreQuestions, question)
+</span>                        }
+                        <span class="cov6" title="45">continue</span>
+                }
+
+                <span class="cov4" title="17">message = Message{}
+                err = fmt.Errorf("question %d: %w", i, err)
+                return</span>
+        }
+        <span class="cov5" title="33">return</span>
+}
+
+func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
+        // An unescaped presentation name is shorter than its wire encoding.
+        // Escape-heavy names grow this slice as needed.
+        <span class="cov5" title="35">var text [maxNameWireSize]byte
+        rendered := text[:0]
+        wireLength := 0
+        off := start
+        next = start
+        ordinary = true
+</span>
+        <span class="cov5" title="35">for </span>{
+                <span class="cov6" title="72">if off &gt;= len(data) </span>{
+                        <span class="cov1" title="1">err = malformed(off, "domain name is not terminated")
+                        return
+</span>                }
+
+                <span class="cov6" title="71">length := data[off]
+                if length&amp;0xc0 != 0 </span>{
+                        <span class="cov4" title="15">ordinary = false
+                        return
+</span>                }
+                <span class="cov6" title="56">if length == 0 </span>{
+                        <span class="cov4" title="17">if len(rendered) == 0 </span>{
+                                <span class="cov1" title="2">name = "."
+</span>                        } else {
+                                <span class="cov4" title="15">name = string(rendered)
+</span>                        }
+                        <span class="cov4" title="17">next = off + 1
+                        return</span>
+                }
+
+                <span class="cov5" title="39">labelLength := int(length)
+                end := off + 1 + labelLength
+                if end &gt; len(data) </span>{
+                        <span class="cov1" title="1">err = malformed(off, "domain label is truncated")
+                        return
+</span>                }
+                <span class="cov5" title="38">wireLength += 1 + labelLength
+                if wireLength &gt;= maxNameWireSize </span>{
+                        <span class="cov1" title="1">err = malformed(start, "domain name exceeds 255 octets")
+                        return
+</span>                }
+
+                <span class="cov5" title="37">rendered = appendEscapedLabel(rendered, data[off+1:end])
+                rendered = append(rendered, '.')
+                off = end</span>
+        }
+}
+
+type namePart struct {
+        offset     int
+        wireLength int
+        textOffset int
+        bits       int
+}
+
+type nameSuffix struct {
+        text       string
+        wireLength int
+}
+
+func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
+        <span class="cov6" title="42">var partBuffer [4]namePart
+        parts := partBuffer[:0]
+        prefixWireLength := 0
+        off := start
+</span>
+        <span class="cov6" title="42">for </span>{
+                <span class="cov6" title="86">if off &gt;= len(data) </span>{
+                        <span class="cov1" title="1">err = malformed(off, "domain name is not terminated")
+                        return
+</span>                }
+
+                <span class="cov6" title="85">labelOffset := off
+                length := data[off]
+                switch length &amp; 0xc0 </span>{
+                case 0x00:
+                        <span class="cov6" title="47">if length == 0 </span>{
+                                <span class="cov4" title="17">tail := nameSuffix{wireLength: 1}
+                                names[labelOffset] = tail
+                                name, err = completeName(data, parts, prefixWireLength, tail, names)
+                                if err == nil </span>{
+                                        <span class="cov4" title="17">next = off + 1
+</span>                                }
+                                <span class="cov4" title="17">return</span>
+                        }
+
+                        <span class="cov5" title="30">labelLength := int(length)
+                        end := off + 1 + labelLength
+                        if end &gt; len(data) </span>{
+                                <span class="cov1" title="1">err = malformed(off, "domain label is truncated")
+                                return
+</span>                        }
+                        <span class="cov5" title="29">prefixWireLength += 1 + labelLength
+                        if prefixWireLength &gt;= maxNameWireSize </span>{
+                                <span class="cov1" title="1">err = malformed(start, "domain name exceeds 255 octets")
+                                return
+</span>                        }
+                        <span class="cov5" title="28">parts = append(parts, namePart{
+                                offset:     labelOffset,
+                                wireLength: 1 + labelLength,
+                        })
+                        off = end</span>
+
+                case 0x40:
+                        <span class="cov5" title="20">if length != 0x41 </span>{
+                                <span class="cov1" title="1">err = unsupportedLabel(off, length)
+                                return
+</span>                        }
+                        <span class="cov4" title="19">var bits int
+                        bits, off, err = unpackBitStringLabel(data, off)
+                        if err != nil </span>{
+                                <span class="cov1" title="2">return
+</span>                        }
+                        <span class="cov4" title="17">wireLength := off - labelOffset
+                        prefixWireLength += wireLength
+                        if prefixWireLength &gt;= maxNameWireSize </span>{
+                                <span class="cov1" title="1">err = malformed(start, "domain name exceeds 255 octets")
+                                return
+</span>                        }
+                        <span class="cov4" title="16">parts = append(parts, namePart{
+                                offset:     labelOffset,
+                                wireLength: wireLength,
+                                bits:       bits,
+                        })</span>
+
+                case 0xc0:
+                        <span class="cov4" title="17">if off+1 &gt;= len(data) </span>{
+                                <span class="cov1" title="1">err = malformed(off, "compression pointer is truncated")
+                                return
+</span>                        }
+                        <span class="cov4" title="16">target := int(length&amp;0x3f)&lt;&lt;8 | int(data[off+1])
+                        if target &gt;= off </span>{
+                                <span class="cov1" title="2">err = malformed(off, "compression pointer does not point backward")
+                                return
+</span>                        }
+                        <span class="cov4" title="14">tail, ok := names[target]
+                        if !ok </span>{
+                                <span class="cov1" title="1">err = malformed(off, "compression pointer target is not a prior label boundary")
+                                return
+</span>                        }
+                        <span class="cov4" title="13">names[labelOffset] = tail
+                        name, err = completeName(data, parts, prefixWireLength, tail, names)
+                        if err == nil </span>{
+                                <span class="cov4" title="12">next = off + 2
+</span>                        }
+                        <span class="cov4" title="13">return</span>
+
+                default:
+                        <span class="cov1" title="1">err = malformed(off, "unallocated DNS label type")
+                        return</span>
+                }
+        }
+}
+
+func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
+        <span class="cov5" title="30">if prefixWireLength &gt; maxNameWireSize-tail.wireLength </span>{
+                <span class="cov1" title="1">err = malformed(parts[0].offset, "domain name exceeds 255 octets")
+                return
+</span>        }
+        <span class="cov5" title="29">wireLength := tail.wireLength + prefixWireLength
+</span>
+        <span class="cov5" title="29">if len(parts) == 0 </span>{
+                <span class="cov4" title="12">name = tail.text
+                if name == "" </span>{
+                        <span class="cov2" title="3">name = "."
+</span>                }
+                <span class="cov4" title="12">return</span>
+        }
+
+        <span class="cov4" title="17">var text [maxNamePresentationSize]byte
+        rendered := text[:0]
+        for i := range parts </span>{
+                <span class="cov5" title="30">part := &amp;parts[i]
+                part.textOffset = len(rendered)
+                off := part.offset
+                if part.bits == 0 </span>{
+                        <span class="cov5" title="21">labelLength := int(data[off])
+                        rendered = appendEscapedLabel(rendered, data[off+1:off+1+labelLength])
+</span>                } else {
+                        <span class="cov3" title="9">bits := part.bits
+                        byteCount := (bits + 7) / 8
+                        rendered = appendBitStringPresentation(rendered, data[off+2:off+2+byteCount], bits)
+</span>                }
+                <span class="cov5" title="30">rendered = append(rendered, '.')</span>
+        }
+        <span class="cov4" title="17">rendered = append(rendered, tail.text...)
+        name = string(rendered)
+</span>
+        <span class="cov4" title="17">for _, part := range parts </span>{
+                <span class="cov5" title="30">names[part.offset] = nameSuffix{
+                        text:       name[part.textOffset:],
+                        wireLength: wireLength,
+</span>                }
+                <span class="cov5" title="30">wireLength -= part.wireLength
+</span>        }
+        <span class="cov4" title="17">return</span>
+}
+
+func unpackBitStringLabel(data []byte, off int) (bits int, next int, err error) {
+        <span class="cov4" title="19">if off+1 &gt;= len(data) </span>{
+                <span class="cov1" title="1">err = malformed(off, "bit-string label has no bit count")
+                return
+</span>        }
+        <span class="cov4" title="18">bits = int(data[off+1])
+        if bits == 0 </span>{
+                <span class="cov4" title="10">bits = 256
+</span>        }
+        <span class="cov4" title="18">byteCount := (bits + 7) / 8
+        next = off + 2 + byteCount
+        if next &gt; len(data) </span>{
+                <span class="cov1" title="1">err = malformed(off, "bit-string label is truncated")
+                return
+</span>        }
+
+        <span class="cov4" title="17">return</span>
+}
+
+func appendBitStringPresentation(text, data []byte, bits int) []byte {
+        <span class="cov3" title="9">const hexDigits = "0123456789abcdef"
+        digitCount := (bits + 3) / 4
+</span>
+        <span class="cov3" title="9">text = append(text, '\\', '[', 'x')
+        for i := 0; i &lt; digitCount; i++ </span>{
+                <span class="cov7" title="147">value := data[i/2]
+                if i%2 == 0 </span>{
+                        <span class="cov6" title="75">value &gt;&gt;= 4
+</span>                } else {
+                        <span class="cov6" title="72">value &amp;= 0x0f
+</span>                }
+                <span class="cov7" title="147">if i == digitCount-1 &amp;&amp; bits%4 != 0 </span>{
+                        <span class="cov3" title="7">value &amp;= 0x0f &lt;&lt; (4 - bits%4)
+</span>                }
+                <span class="cov7" title="147">text = append(text, hexDigits[value])</span>
+        }
+        <span class="cov3" title="9">text = append(text, '/')
+        text = strconv.AppendInt(text, int64(bits), 10)
+        return append(text, ']')</span>
+}
+
+func appendEscapedLabel(text, label []byte) []byte {
+        <span class="cov6" title="58">for _, value := range label </span>{
+                <span class="cov10" title="821">switch value </span>{
+                case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
+                        <span class="cov3" title="9">return appendEscapedLabelSlow(text, label)</span>
+                default:
+                        <span class="cov9" title="812">if value &lt; ' ' || value &gt; '~' </span>{
+                                <span class="cov4" title="12">return appendEscapedLabelSlow(text, label)
+</span>                        }
+                }
+        }
+        <span class="cov5" title="37">return append(text, label...)</span>
+}
+
+func appendEscapedLabelSlow(text, label []byte) []byte {
+        <span class="cov5" title="21">for _, value := range label </span>{
+                <span class="cov8" title="309">switch value </span>{
+                case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
+                        <span class="cov4" title="15">text = append(text, '\\', value)</span>
+                default:
+                        <span class="cov8" title="294">if value &lt; ' ' || value &gt; '~' </span>{
+                                <span class="cov8" title="276">text = append(text, '\\', '0'+value/100, '0'+value/10%10, '0'+value%10)
+</span>                        } else {
+                                <span class="cov4" title="18">text = append(text, value)
+</span>                        }
+                }
+        }
+        <span class="cov5" title="21">return text</span>
+}
+
+func malformed(off int, reason string) error {
+        <span class="cov5" title="20">return fmt.Errorf("%w at offset %d: %s", ErrMalformed, off, reason)
+</span>}
+
+func unsupportedLabel(off int, labelType byte) error {
+        <span class="cov1" title="1">return fmt.Errorf("%w 0x%02x at offset %d", ErrUnsupportedLabel, labelType, off)
+</span>}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
