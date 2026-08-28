@@ -1,6 +1,6 @@
-[![build](https://github.com/linkdata/dnswire/actions/workflows/build.yml/badge.svg)](https://github.com/linkdata/dnswire/actions/workflows/build.yml)
-[![coverage](https://github.com/linkdata/dnswire/blob/gitcoverage/main/badge.svg)](https://html-preview.github.io/?url=https://github.com/linkdata/dnswire/blob/gitcoverage/main/report.html)
-[![Docs](https://godoc.org/github.com/linkdata/dnswire?status.svg)](https://godoc.org/github.com/linkdata/dnswire)
+[![build](https://github.com/dnstapir/dnswire/actions/workflows/build.yml/badge.svg)](https://github.com/dnstapir/dnswire/actions/workflows/build.yml)
+[![coverage](https://github.com/dnstapir/dnswire/blob/gitcoverage/main/badge.svg)](https://html-preview.github.io/?url=https://github.com/dnstapir/dnswire/blob/gitcoverage/main/report.html)
+[![Docs](https://godoc.org/github.com/dnstapir/dnswire?status.svg)](https://godoc.org/github.com/dnstapir/dnswire)
 
 # dnswire
 

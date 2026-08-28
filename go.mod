@@ -1,4 +1,4 @@
-module github.com/linkdata/dnswire
+module github.com/dnstapir/dnswire
 
 go 1.26
 

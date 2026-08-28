@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	dnsv2 "codeberg.org/miekg/dns"
-	"github.com/linkdata/dnswire"
+	"github.com/dnstapir/dnswire"
 	dnsv1 "github.com/miekg/dns"
 )
 
