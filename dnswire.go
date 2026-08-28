@@ -128,8 +128,7 @@ func Parse(data []byte) (message Message, err error) {
 // needs the map. Callers pass updated back in for the next question.
 func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Question, next int, updated map[int]nameSuffix, err error) {
 	ordinary := false
-	next = off
-	updated = names
+	next, updated = off, names
 	if updated == nil {
 		if question.Name, next, ordinary, err = unpackOrdinaryName(data, off); err != nil {
 			return
@@ -156,10 +155,12 @@ func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Qu
 func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
 	// An unescaped presentation name is shorter than its wire encoding.
 	// Escape-heavy names grow this slice as needed.
-	var text [maxNameWireSize]byte
-	rendered := text[:0]
-	wireLength := 0
-	off := start
+	var (
+		text       [maxNameWireSize]byte
+		rendered   = text[:0]
+		wireLength int
+		off        = start
+	)
 	next = start
 	ordinary = true
 
@@ -215,12 +216,14 @@ type nameSuffix struct {
 }
 
 func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
-	var partBuffer [4]namePart
-	parts := partBuffer[:0]
-	prefixWireLength := 0
-	off := start
-	var tail nameSuffix
-	terminalSize := 0
+	var (
+		partBuffer       [4]namePart
+		parts            = partBuffer[:0]
+		prefixWireLength int
+		tail             nameSuffix
+		terminalSize     int
+		off              = start
+	)
 
 scan:
 	for {
@@ -326,8 +329,10 @@ func completeName(data []byte, parts []namePart, prefixWireLength int, tail name
 	}
 	wireLength := tail.wireLength + prefixWireLength
 
-	var text [maxNamePresentationSize]byte
-	rendered := text[:0]
+	var (
+		text     [maxNamePresentationSize]byte
+		rendered = text[:0]
+	)
 	for i := range parts {
 		part := &parts[i]
 		part.textOffset = len(rendered)
