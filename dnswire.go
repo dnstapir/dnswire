@@ -83,8 +83,11 @@ type Question struct {
 
 // Message contains a DNS header and its questions.
 type Message struct {
-	Header        Header
-	Question      Question // First question; zero when Header.QuestionCount is zero.
+	Header   Header
+	Question Question // First question; zero when Header.QuestionCount is zero.
+	// Length is the number of octets Parse consumed: the header plus the
+	// complete question section. Records begin at data[Length:].
+	Length        int
 	moreQuestions []Question
 }
 
@@ -156,6 +159,7 @@ func Parse(data []byte) (message Message, err error) {
 			message.moreQuestions = append(message.moreQuestions, question)
 		}
 	}
+	message.Length = off
 	return
 }
 

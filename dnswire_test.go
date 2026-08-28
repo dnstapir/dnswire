@@ -48,6 +48,9 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	if !reflect.DeepEqual(gotQuestions, wantQuestions) {
 		t.Fatalf("Questions = %#v, want %#v", gotQuestions, wantQuestions)
 	}
+	if got.Length != len(data) {
+		t.Fatalf("Length = %d, want %d", got.Length, len(data))
+	}
 	seen := 0
 	for range got.Questions {
 		seen++
@@ -117,8 +120,24 @@ func TestParseNoQuestions(t *testing.T) {
 	if got.Question != (Question{}) {
 		t.Fatalf("Question = %#v, want zero value", got.Question)
 	}
+	if got.Length != HeaderSize {
+		t.Fatalf("Length = %d, want %d", got.Length, HeaderSize)
+	}
 	for range got.Questions {
 		t.Fatal("message yielded a question")
+	}
+}
+
+func TestParseLengthIgnoresTrailingData(t *testing.T) {
+	data := questionPacket(wireName([]byte("example"), []byte("com")))
+	want := len(data)
+	data = append(data, 0xde, 0xad, 0xbe, 0xef)
+	got, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Length != want {
+		t.Fatalf("Length = %d, want %d", got.Length, want)
 	}
 }
 
@@ -614,6 +633,13 @@ func FuzzParse(f *testing.F) {
 		}
 		if questionCount != int(got.Header.QuestionCount) {
 			t.Fatalf("decoded %d questions, header says %d", questionCount, got.Header.QuestionCount)
+		}
+		if got.Length < HeaderSize || got.Length > len(data) {
+			t.Fatalf("Length = %d, data is %d octets", got.Length, len(data))
+		}
+		prefix, err := Parse(data[:got.Length])
+		if err != nil || !reflect.DeepEqual(got, prefix) {
+			t.Fatalf("Parse of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
 		}
 		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {
