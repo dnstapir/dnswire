@@ -22,7 +22,7 @@ message, err := dnswire.Parse(packet)
 if err != nil {
 	return err
 }
-for _, question := range message.Questions {
+for question := range message.Questions {
 	fmt.Println(question.Name, question.Type, question.Class)
 }
 ```
@@ -32,27 +32,20 @@ for _, question := range message.Questions {
 `Parse` validates the 12-byte header and complete question section. It does
 not inspect or validate answer, authority, or additional records.
 
+`Message.Question` holds the first question. `Message.Questions` enumerates
+the complete question section in wire order.
+
 Input is limited to 65535 octets. Parsing checks every offset and length,
 enforces the 63-octet label and 255-octet expanded-name limits, rejects
 forward or invalid compression targets, and returns no partial result.
 
 RFC 6891 deprecates RFC 2673 binary labels and forbids generating or passing
-them. Decoding remains supported for historical captures; this package does
-not generate DNS messages.
+them. This package decodes but does not generate them.
 
 ## Benchmarks
 
 Comparative benchmarks use the miekg/dns versions used by EDM. These are
 benchmark-only dependencies; the parser package imports neither version.
-
-The typical input is one question with an uncompressed name that needs no
-presentation escaping. [RFC 9619](https://www.rfc-editor.org/rfc/rfc9619.html)
-limits ordinary QUERY messages to at most one question. A
-[26-billion-query-pair measurement](https://users.cs.northwestern.edu/~ychen/Papers/DNS_ToN15.pdf)
-found bytes outside the alphanumeric-and-hyphen class in 0.2% of queries at
-global recursive resolvers. Names needing presentation escaping are a subset
-of that group; this parser still accepts and losslessly escapes those legal
-octets.
 
 ```sh
 go test -run=^$ -bench=. -benchmem -count=10
@@ -71,12 +64,12 @@ using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of ten runs.
 
 | Input | Parser | ns/op | B/op | allocs/op |
 | --- | --- | ---: | ---: | ---: |
-| Typical | dnswire | 37.63 | 40 | 2 |
-| Typical | miekg/dns v1 | 54.51 | 40 | 2 |
-| Typical | miekg/dns v2 | 47.41 | 80 | 3 |
-| Unusual legal octets | dnswire | 40.74 | 72 | 2 |
-| Unusual legal octets | miekg/dns v1 | 66.61 | 72 | 2 |
-| Unusual legal octets | miekg/dns v2 | 46.97 | 88 | 3 |
-| Three compressed questions | dnswire | 110.6 | 104 | 3 |
-| Three compressed questions | miekg/dns v1 | 139.3 | 208 | 6 |
-| Three compressed questions | miekg/dns v2 | 138.5 | 296 | 9 |
+| Typical | dnswire | 29.65 | 16 | 1 |
+| Typical | miekg/dns v1 | 54.78 | 40 | 2 |
+| Typical | miekg/dns v2 | 48.52 | 80 | 3 |
+| Unusual legal octets | dnswire | 34.33 | 48 | 1 |
+| Unusual legal octets | miekg/dns v1 | 66.92 | 72 | 2 |
+| Unusual legal octets | miekg/dns v2 | 46.43 | 88 | 3 |
+| Three compressed questions | dnswire | 109.7 | 72 | 3 |
+| Three compressed questions | miekg/dns v1 | 139.9 | 208 | 6 |
+| Three compressed questions | miekg/dns v2 | 141.0 | 296 | 9 |

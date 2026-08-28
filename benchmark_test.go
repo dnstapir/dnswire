@@ -35,12 +35,12 @@ func BenchmarkParse(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					question := message.Questions[0]
+					question := message.Question
 					resultName = question.Name
 					resultID = message.Header.ID
 					resultType = question.Type
 					resultClass = question.Class
-					resultQuestionCount = len(message.Questions)
+					resultQuestionCount = int(message.Header.QuestionCount)
 				}
 			})
 

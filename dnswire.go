@@ -45,8 +45,21 @@ type Question struct {
 
 // Message contains a DNS header and its questions.
 type Message struct {
-	Header    Header
-	Questions []Question
+	Header        Header
+	Question      Question // First question; zero when Header.QuestionCount is zero.
+	moreQuestions []Question
+}
+
+// Questions yields every decoded question in wire order.
+func (message Message) Questions(yield func(Question) bool) {
+	if message.Header.QuestionCount == 0 || !yield(message.Question) {
+		return
+	}
+	for _, question := range message.moreQuestions {
+		if !yield(question) {
+			return
+		}
+	}
 }
 
 // Parse decodes a DNS header and every question from data.
@@ -84,7 +97,9 @@ func Parse(data []byte) (message Message, err error) {
 		return
 	}
 
-	message.Questions = make([]Question, 0, questionCount)
+	if questionCount > 1 {
+		message.moreQuestions = make([]Question, 0, questionCount-1)
+	}
 	var names map[int]nameSuffix
 	if questionCount > 1 {
 		names = make(map[int]nameSuffix)
@@ -109,7 +124,11 @@ func Parse(data []byte) (message Message, err error) {
 			question.Type = binary.BigEndian.Uint16(data[off : off+2])
 			question.Class = binary.BigEndian.Uint16(data[off+2 : off+4])
 			off += 4
-			message.Questions = append(message.Questions, question)
+			if i == 0 {
+				message.Question = question
+			} else {
+				message.moreQuestions = append(message.moreQuestions, question)
+			}
 			continue
 		}
 

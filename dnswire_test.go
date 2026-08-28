@@ -41,8 +41,35 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 		{Name: "example.com.", Type: 1, Class: 1},
 		{Name: "www.com.", Type: 28, Class: 255},
 	}
-	if !reflect.DeepEqual(got.Questions, wantQuestions) {
-		t.Fatalf("Questions = %#v, want %#v", got.Questions, wantQuestions)
+	var gotQuestions []Question
+	for question := range got.Questions {
+		gotQuestions = append(gotQuestions, question)
+	}
+	if !reflect.DeepEqual(gotQuestions, wantQuestions) {
+		t.Fatalf("Questions = %#v, want %#v", gotQuestions, wantQuestions)
+	}
+	seen := 0
+	for range got.Questions {
+		seen++
+		if seen == 2 {
+			break
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("early iteration yielded %d questions, want 2", seen)
+	}
+}
+
+func TestParseNoQuestions(t *testing.T) {
+	got, err := Parse(testHeader(123, 0, 0, 0, 0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Question != (Question{}) {
+		t.Fatalf("Question = %#v, want zero value", got.Question)
+	}
+	for range got.Questions {
+		t.Fatal("message yielded a question")
 	}
 }
 
@@ -84,8 +111,8 @@ func TestParsePresentationNames(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Questions[0].Name != test.want {
-				t.Fatalf("Name = %q, want %q", got.Questions[0].Name, test.want)
+			if got.Question.Name != test.want {
+				t.Fatalf("Name = %q, want %q", got.Question.Name, test.want)
 			}
 		})
 	}
@@ -117,10 +144,12 @@ func TestParseCompressionPointerChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"example.com.", "example.com.", "example.com.", "."}
-	for i, question := range got.Questions {
+	i := 0
+	for question := range got.Questions {
 		if question.Name != want[i] {
 			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, want[i])
 		}
+		i++
 	}
 }
 
@@ -130,10 +159,12 @@ func TestParseManyLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, question := range got.Questions {
+	i := 0
+	for question := range got.Questions {
 		if question.Name != "a.b.c.d.e." {
 			t.Errorf("Questions[%d].Name = %q, want %q", i, question.Name, "a.b.c.d.e.")
 		}
+		i++
 	}
 }
 
@@ -147,8 +178,8 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Questions[0].Name != `\[xd074/14].` {
-		t.Fatalf("Name = %q", got.Questions[0].Name)
+	if got.Question.Name != `\[xd074/14].` {
+		t.Fatalf("Name = %q", got.Question.Name)
 	}
 
 	data = testHeader(0, 0, 1, 0, 0, 0)
@@ -162,8 +193,8 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `\[x` + strings.Repeat("0", 64) + `/256].`
-	if got.Questions[0].Name != want {
-		t.Fatalf("Name = %q, want %q", got.Questions[0].Name, want)
+	if got.Question.Name != want {
+		t.Fatalf("Name = %q, want %q", got.Question.Name, want)
 	}
 
 	// RFC 2673 requires receivers to ignore padding bits.
@@ -172,8 +203,8 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Questions[0].Name != `\[x8/1].` {
-		t.Fatalf("Name = %q", got.Questions[0].Name)
+	if got.Question.Name != `\[x8/1].` {
+		t.Fatalf("Name = %q", got.Question.Name)
 	}
 
 	data = questionPacket([]byte{0x41, 1, 0xff, 3, 'c', 'o', 'm', 0})
@@ -181,8 +212,8 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Questions[0].Name != `\[x8/1].com.` {
-		t.Fatalf("Name = %q", got.Questions[0].Name)
+	if got.Question.Name != `\[x8/1].com.` {
+		t.Fatalf("Name = %q", got.Question.Name)
 	}
 }
 
@@ -301,13 +332,15 @@ func FuzzParse(f *testing.F) {
 			}
 			return
 		}
-		if len(got.Questions) != int(got.Header.QuestionCount) {
-			t.Fatalf("decoded %d questions, header says %d", len(got.Questions), got.Header.QuestionCount)
-		}
-		for _, question := range got.Questions {
+		questionCount := 0
+		for question := range got.Questions {
+			questionCount++
 			if !strings.HasSuffix(question.Name, ".") {
 				t.Fatalf("non-absolute decoded name %q", question.Name)
 			}
+		}
+		if questionCount != int(got.Header.QuestionCount) {
+			t.Fatalf("decoded %d questions, header says %d", questionCount, got.Header.QuestionCount)
 		}
 		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {
@@ -341,10 +374,12 @@ func FuzzParseOrdinaryName(f *testing.F) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for i, question := range got.Questions {
+			i := 0
+			for question := range got.Questions {
 				if question.Name != want {
 					t.Fatalf("Questions[%d].Name = %q, want %q", i, question.Name, want)
 				}
+				i++
 			}
 		}
 	})
@@ -370,10 +405,12 @@ func FuzzParseHistoricBitString(f *testing.F) {
 			t.Fatal(err)
 		}
 		want := testBitStringPresentation(payload, bits)
-		for i, question := range got.Questions {
+		i := 0
+		for question := range got.Questions {
 			if question.Name != want {
 				t.Fatalf("Questions[%d].Name = %q, want %q", i, question.Name, want)
 			}
+			i++
 		}
 	})
 }
