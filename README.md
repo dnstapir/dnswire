@@ -9,9 +9,9 @@ It decodes every question name without losing label boundaries or octets:
 - historic RFC 2673 bit-string labels are rendered as hexadecimal bit strings;
 - unknown extended label types are rejected explicitly.
 
-The parser has no dependencies and exposes DNS type and class values as
-`uint16`, so callers can compare them directly with constants from either
-`codeberg.org/miekg/dns` v2 or `github.com/miekg/dns` v1.
+The parser package uses only the standard library and exposes DNS type and
+class values as `uint16`, so callers can compare them directly with constants
+from either `codeberg.org/miekg/dns` v2 or `github.com/miekg/dns` v1.
 
 ```go
 message, err := dnswire.Parse(packet)
@@ -35,3 +35,20 @@ forward or invalid compression targets, and returns no partial result.
 RFC 6891 deprecates RFC 2673 binary labels and forbids generating or passing
 them. Decoding remains supported for historical captures; this package does
 not generate DNS messages.
+
+## Benchmarks
+
+Comparative benchmarks use the miekg/dns versions used by EDM. These are
+benchmark-only dependencies; the parser package imports neither version.
+
+```sh
+go test -run=^$ -bench=. -benchmem
+```
+
+The v2 benchmark intentionally accepts its lossy presentation name and
+measures its normal question-only decoding path. V1 has no question-only
+option, so every benchmark packet declares zero answer, authority, and
+additional records; its full-message unpacker therefore decodes the same
+wire sections. Each implementation receives a fresh message value and
+identical input bytes. Each benchmark consumes the message ID, the first
+question's name, type, and class, and the total question count.
