@@ -100,12 +100,12 @@ using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of ten runs.
 
 | Input | Parser | ns/op | B/op | allocs/op |
 | --- | --- | ---: | ---: | ---: |
-| Typical | dnswire | 24.73 | 16 | 1 |
-| Typical | miekg/dns v1 | 58.63 | 40 | 2 |
-| Typical | miekg/dns v2 | 49.61 | 80 | 3 |
-| Unusual legal octets | dnswire | 30.30 | 48 | 1 |
-| Unusual legal octets | miekg/dns v1 | 67.59 | 72 | 2 |
-| Unusual legal octets | miekg/dns v2 | 46.67 | 88 | 3 |
-| Three compressed questions | dnswire | 107.55 | 72 | 3 |
-| Three compressed questions | miekg/dns v1 | 143.70 | 208 | 6 |
-| Three compressed questions | miekg/dns v2 | 141.25 | 296 | 9 |
+| Typical | dnswire | 22.39 | 16 | 1 |
+| Typical | miekg/dns v1 | 55.17 | 40 | 2 |
+| Typical | miekg/dns v2 | 48.06 | 80 | 3 |
+| Unusual legal octets | dnswire | 30.70 | 48 | 1 |
+| Unusual legal octets | miekg/dns v1 | 66.86 | 72 | 2 |
+| Unusual legal octets | miekg/dns v2 | 46.28 | 88 | 3 |
+| Three compressed questions | dnswire | 105.60 | 72 | 3 |
+| Three compressed questions | miekg/dns v1 | 137.10 | 208 | 6 |
+| Three compressed questions | miekg/dns v2 | 140.85 | 296 | 9 |

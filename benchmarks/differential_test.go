@@ -216,7 +216,7 @@ func compareQuestions(t *testing.T, data []byte, message dnswire.Message, v1 *dn
 func differential(t *testing.T, data []byte) {
 	t.Helper()
 	var message dnswire.Message
-	err := message.Unpack(data)
+	_, err := message.Unpack(data)
 	if err != nil {
 		if !errors.Is(err, dnswire.ErrMalformed) && !errors.Is(err, dnswire.ErrUnsupportedLabel) {
 			t.Fatalf("Unpack(%x) unexpected error identity: %v", data, err)
@@ -232,15 +232,15 @@ func differential(t *testing.T, data []byte) {
 	}
 }
 
-// TestParseLegalMessages verifies that Parse accepts every generated
+// TestUnpackLegalMessages verifies that Unpack accepts every generated
 // spec-legal message and decodes the names the oracle expects, cross-checked
 // against miekg/dns v1 where it accepts the same message.
-func TestParseLegalMessages(t *testing.T) {
+func TestUnpackLegalMessages(t *testing.T) {
 	r := rand.New(rand.NewPCG(2026, 8))
 	for range 100_000 {
 		data, want := legalMessage(r)
 		var message dnswire.Message
-		err := message.Unpack(data)
+		_, err := message.Unpack(data)
 		if err != nil {
 			t.Fatalf("Unpack(%x) = %v, want success", data, err)
 		}
@@ -261,9 +261,9 @@ func TestParseLegalMessages(t *testing.T) {
 	}
 }
 
-// TestParseMutationDifferential runs the differential comparison on random
+// TestUnpackMutationDifferential runs the differential comparison on random
 // mutations of legal messages, deterministically seeded.
-func TestParseMutationDifferential(t *testing.T) {
+func TestUnpackMutationDifferential(t *testing.T) {
 	r := rand.New(rand.NewPCG(2026, 28))
 	seeds := make([][]byte, 40)
 	for i := range seeds {
@@ -285,9 +285,9 @@ func TestParseMutationDifferential(t *testing.T) {
 	}
 }
 
-// FuzzParseDifferential fuzzes the differential comparison against miekg/dns
+// FuzzUnpackDifferential fuzzes the differential comparison against miekg/dns
 // v1 starting from generated legal messages.
-func FuzzParseDifferential(f *testing.F) {
+func FuzzUnpackDifferential(f *testing.F) {
 	r := rand.New(rand.NewPCG(20, 26))
 	for range 8 {
 		data, _ := legalMessage(r)

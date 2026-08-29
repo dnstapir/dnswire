@@ -17,6 +17,8 @@ var (
 	resultQuestionCount int
 )
 
+// BenchmarkParse compares question decoding across dnswire and miekg/dns v1
+// and v2 on identical input.
 func BenchmarkParse(b *testing.B) {
 	for _, test := range []struct {
 		name string
@@ -32,7 +34,7 @@ func BenchmarkParse(b *testing.B) {
 				b.SetBytes(int64(len(test.data)))
 				for b.Loop() {
 					var message dnswire.Message
-					if err := message.Unpack(test.data); err != nil {
+					if _, err := message.Unpack(test.data); err != nil {
 						b.Fatal(err)
 					}
 					question := message.Question
