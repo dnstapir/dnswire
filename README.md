@@ -95,17 +95,17 @@ wire sections. Each implementation receives a fresh message value and
 identical input bytes. Each benchmark consumes the message ID, the first
 question's name, type, and class, and the total question count.
 
-Results recorded 2026-08-28 with Go 1.27.0 on darwin/arm64 (Apple M5 Max),
+Results recorded 2026-08-29 with Go 1.27.0 on darwin/arm64 (Apple M5 Max),
 using miekg/dns v1.1.72 and v2 v0.6.101. Times are medians of ten runs.
 
 | Input | Parser | ns/op | B/op | allocs/op |
 | --- | --- | ---: | ---: | ---: |
-| Typical | dnswire | 29.65 | 16 | 1 |
-| Typical | miekg/dns v1 | 54.78 | 40 | 2 |
-| Typical | miekg/dns v2 | 48.52 | 80 | 3 |
-| Unusual legal octets | dnswire | 34.33 | 48 | 1 |
-| Unusual legal octets | miekg/dns v1 | 66.92 | 72 | 2 |
-| Unusual legal octets | miekg/dns v2 | 46.43 | 88 | 3 |
-| Three compressed questions | dnswire | 109.7 | 72 | 3 |
-| Three compressed questions | miekg/dns v1 | 139.9 | 208 | 6 |
-| Three compressed questions | miekg/dns v2 | 141.0 | 296 | 9 |
+| Typical | dnswire | 24.73 | 16 | 1 |
+| Typical | miekg/dns v1 | 58.63 | 40 | 2 |
+| Typical | miekg/dns v2 | 49.61 | 80 | 3 |
+| Unusual legal octets | dnswire | 30.30 | 48 | 1 |
+| Unusual legal octets | miekg/dns v1 | 67.59 | 72 | 2 |
+| Unusual legal octets | miekg/dns v2 | 46.67 | 88 | 3 |
+| Three compressed questions | dnswire | 107.55 | 72 | 3 |
+| Three compressed questions | miekg/dns v1 | 143.70 | 208 | 6 |
+| Three compressed questions | miekg/dns v2 | 141.25 | 296 | 9 |
