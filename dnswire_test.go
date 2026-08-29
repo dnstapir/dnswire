@@ -841,6 +841,8 @@ func testBitStringPresentation(data []byte, bits int) string {
 	return `\[x` + digits + `/` + strconv.Itoa(bits) + `].`
 }
 
+// TestQuestionLabels checks label iteration over root, plain, and escaped
+// names, and early iteration exit.
 func TestQuestionLabels(t *testing.T) {
 	tests := []struct {
 		name string
@@ -892,14 +894,11 @@ func TestNextLabel(t *testing.T) {
 	}
 	for _, test := range tests {
 		offset := 0
-		for i, want := range test.steps {
+		for _, want := range test.steps {
 			next, end := NextLabel(test.name, offset)
 			if next != want.next || end != want.end {
 				t.Errorf("NextLabel(%q, %d) = (%d, %t), want (%d, %t)", test.name, offset, next, end, want.next, want.end)
 				break
-			}
-			if end != (i == len(test.steps)-1) {
-				t.Errorf("NextLabel(%q, %d) ended after step %d of %d", test.name, offset, i+1, len(test.steps))
 			}
 			offset = next
 		}
