@@ -204,6 +204,8 @@ func unpackQuestion(data []byte, off int, names map[int]nameSuffix) (question Qu
 	return
 }
 
+// unpackOrdinaryName decodes a name made solely of ordinary labels, returning
+// ordinary false without consuming input when it meets any other label type.
 func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary bool, err error) {
 	// An unescaped presentation name is shorter than its wire encoding.
 	// Escape-heavy names grow this slice as needed.
@@ -255,6 +257,7 @@ func unpackOrdinaryName(data []byte, start int) (name string, next int, ordinary
 	}
 }
 
+// namePart records one decoded label of a name prefix awaiting completion.
 type namePart struct {
 	offset     int // wire offset of the label
 	wireLength int
@@ -262,11 +265,15 @@ type namePart struct {
 	bits       int // 0 for an ordinary label, else the RFC 2673 bit count (1-256)
 }
 
+// nameSuffix is the fully decoded name at a registered label boundary: its
+// presentation text ("" for the root) and expanded wire length.
 type nameSuffix struct {
 	text       string
 	wireLength int
 }
 
+// unpackName decodes one name of any supported label types starting at
+// start, recording every decoded label boundary in names.
 func unpackName(data []byte, start int, names map[int]nameSuffix) (name string, next int, err error) {
 	var (
 		partBuffer       [4]namePart
@@ -366,6 +373,9 @@ scan:
 	return
 }
 
+// completeName enforces the expanded-name length limit, renders the prefix
+// parts and tail into presentation form, and registers each part's suffix in
+// names.
 func completeName(data []byte, parts []namePart, prefixWireLength int, tail nameSuffix, names map[int]nameSuffix) (name string, err error) {
 	if prefixWireLength > maxNameWireSize-tail.wireLength {
 		// prefixWireLength is nonzero only when parts is non-empty.
@@ -412,6 +422,8 @@ func completeName(data []byte, parts []namePart, prefixWireLength int, tail name
 	return
 }
 
+// unpackBitStringLabel validates the RFC 2673 bit-string label at off and
+// returns its bit count and the offset of the following label.
 func unpackBitStringLabel(data []byte, off int) (bits int, next int, err error) {
 	if off+1 >= len(data) {
 		err = malformed(off, "bit-string label has no bit count")
@@ -429,6 +441,8 @@ func unpackBitStringLabel(data []byte, off int) (bits int, next int, err error) 
 	return
 }
 
+// appendBitStringPresentation appends the RFC 2673 hexadecimal presentation
+// of a bit-string label to text, masking the unused pad bits.
 func appendBitStringPresentation(text, data []byte, bits int) []byte {
 	const hexDigits = "0123456789abcdef"
 	digitCount := (bits + 3) / 4
@@ -463,6 +477,8 @@ var escapeNeeded = func() (table [256]bool) {
 	return
 }()
 
+// appendEscapedLabel appends label to text in RFC 1035 presentation form,
+// copying it verbatim when no octet needs escaping.
 func appendEscapedLabel(text, label []byte) []byte {
 	for _, value := range label {
 		if escapeNeeded[value] {
@@ -472,6 +488,8 @@ func appendEscapedLabel(text, label []byte) []byte {
 	return append(text, label...)
 }
 
+// appendEscapedLabelSlow appends label to text, escaping specials with a
+// backslash and other escape-needing octets as \DDD.
 func appendEscapedLabelSlow(text, label []byte) []byte {
 	for _, value := range label {
 		switch value {
@@ -488,10 +506,13 @@ func appendEscapedLabelSlow(text, label []byte) []byte {
 	return text
 }
 
+// malformed returns an error wrapping ErrMalformed located at off.
 func malformed(off int, reason string) error {
 	return fmt.Errorf("%w at offset %d: %s", ErrMalformed, off, reason)
 }
 
+// unsupportedLabel returns an error wrapping ErrUnsupportedLabel for the
+// label type octet at off.
 func unsupportedLabel(off int, labelType byte) error {
 	return fmt.Errorf("%w 0x%02x at offset %d", ErrUnsupportedLabel, labelType, off)
 }

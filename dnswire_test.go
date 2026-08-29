@@ -750,6 +750,7 @@ func FuzzUnpackHistoricBitString(f *testing.F) {
 	})
 }
 
+// testHeader returns a 12-octet DNS header with the given field values.
 func testHeader(id, flags, questions, answers, authorities, additionals uint16) []byte {
 	data := make([]byte, HeaderSize)
 	binary.BigEndian.PutUint16(data[0:2], id)
@@ -761,6 +762,7 @@ func testHeader(id, flags, questions, answers, authorities, additionals uint16) 
 	return data
 }
 
+// questionPacket wraps one encoded name in a single-question message.
 func questionPacket(name []byte) []byte {
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	data = append(data, name...)
@@ -768,6 +770,8 @@ func questionPacket(name []byte) []byte {
 	return appendUint16(data, 1)
 }
 
+// compressedQuestionPair wraps name in a two-question message whose second
+// question is a compression pointer to the first.
 func compressedQuestionPair(name []byte) []byte {
 	data := testHeader(0, 0, 2, 0, 0, 0)
 	data = append(data, name...)
@@ -778,6 +782,7 @@ func compressedQuestionPair(name []byte) []byte {
 	return appendUint16(data, 1)
 }
 
+// wireName encodes labels as an ordinary wire-format name.
 func wireName(labels ...[]byte) []byte {
 	var data []byte
 	for _, label := range labels {
@@ -790,10 +795,13 @@ func wireName(labels ...[]byte) []byte {
 	return append(data, 0)
 }
 
+// appendUint16 appends value in big-endian order.
 func appendUint16(data []byte, value uint16) []byte {
 	return binary.BigEndian.AppendUint16(data, value)
 }
 
+// testPresentationName renders labels in presentation form, mirroring the
+// documented escaping independently of the implementation.
 func testPresentationName(labels ...[]byte) string {
 	if len(labels) == 0 {
 		return "."
@@ -821,6 +829,8 @@ func testPresentationName(labels ...[]byte) string {
 	return name.String()
 }
 
+// testBitStringPresentation renders a bit-string label in presentation
+// form, canonicalizing pad bits.
 func testBitStringPresentation(data []byte, bits int) string {
 	canonical := bytes.Clone(data)
 	if unusedBits := len(canonical)*8 - bits; unusedBits != 0 {
