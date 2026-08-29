@@ -865,3 +865,67 @@ func testBitStringPresentation(data []byte, bits int) string {
 	digits = digits[:(bits+3)/4]
 	return `\[x` + digits + `/` + strconv.Itoa(bits) + `].`
 }
+
+// TestQuestionLabels checks label iteration over root, plain, and escaped
+// names, and early iteration exit.
+func TestQuestionLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		want []string
+	}{
+		{".", nil},
+		{"example.com.", []string{"example", "com"}},
+		{`a\.b.example.`, []string{`a\.b`, "example"}},
+		{`a\\.b.`, []string{`a\\`, "b"}},
+		{`\000\046x.y.`, []string{`\000\046x`, "y"}},
+	}
+	for _, test := range tests {
+		var got []string
+		for label := range (Question{Name: test.name}).Labels {
+			got = append(got, label)
+		}
+		if !reflect.DeepEqual(got, test.want) {
+			t.Errorf("Labels(%q) = %q, want %q", test.name, got, test.want)
+		}
+	}
+	seen := 0
+	for range (Question{Name: "a.b.c."}).Labels {
+		seen++
+		break
+	}
+	if seen != 1 {
+		t.Errorf("early break yielded %d labels, want 1", seen)
+	}
+}
+
+// TestNextLabel walks names label by label and checks each step against the
+// miekg/dns NextLabel contract, including the empty and root names.
+func TestNextLabel(t *testing.T) {
+	type step struct {
+		next int
+		end  bool
+	}
+	tests := []struct {
+		name  string
+		steps []step
+	}{
+		{"", []step{{0, true}}},
+		{".", []step{{1, true}}},
+		{"com.", []step{{4, true}}},
+		{"example.com.", []step{{8, false}, {12, true}}},
+		{`a\.b.example.`, []step{{5, false}, {13, true}}},
+		{`a\\.b.`, []step{{4, false}, {6, true}}},
+		{`\000x.y.`, []step{{6, false}, {8, true}}},
+	}
+	for _, test := range tests {
+		offset := 0
+		for _, want := range test.steps {
+			next, end := NextLabel(test.name, offset)
+			if next != want.next || end != want.end {
+				t.Errorf("NextLabel(%q, %d) = (%d, %t), want (%d, %t)", test.name, offset, next, end, want.next, want.end)
+				break
+			}
+			offset = next
+		}
+	}
+}

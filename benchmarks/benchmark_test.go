@@ -128,3 +128,55 @@ func name(labels ...[]byte) []byte {
 	}
 	return append(data, 0)
 }
+
+// BenchmarkLabels compares label splitting via Question.Labels, dnswire
+// NextLabel, and miekg/dns NextLabel.
+func BenchmarkLabels(b *testing.B) {
+	for _, test := range []struct {
+		name  string
+		qname string
+	}{
+		{name: "typical", qname: "www.example.com."},
+		{name: "escaped", qname: `a\.b.\000\255x.example.`},
+	} {
+		b.Run(test.name, func(b *testing.B) {
+			question := dnswire.Question{Name: test.qname}
+			b.Run("dnswire", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					for label := range question.Labels {
+						resultName = label
+					}
+				}
+			})
+			b.Run("dnswire_nextlabel", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					start := 0
+					for {
+						next, end := dnswire.NextLabel(test.qname, start)
+						resultName = test.qname[start : next-1]
+						if end {
+							break
+						}
+						start = next
+					}
+				}
+			})
+			b.Run("miekg_v1", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					start := 0
+					for {
+						next, end := dnsv1.NextLabel(test.qname, start)
+						resultName = test.qname[start : next-1]
+						if end {
+							break
+						}
+						start = next
+					}
+				}
+			})
+		})
+	}
+}

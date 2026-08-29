@@ -34,7 +34,9 @@ for question := range message.Questions {
 answer, authority, or additional records.
 
 `Message.Question` holds the first question. `Message.Questions` enumerates
-the complete question section in wire order.
+the complete question section in wire order. `Question.Labels` iterates a
+name's presentation-form labels without allocating, and `NextLabel` is a
+drop-in for the miekg/dns function of the same name.
 
 Input is limited to 65535 octets. Parsing checks every offset and length,
 enforces the 63-octet label and 255-octet expanded-name limits, rejects
