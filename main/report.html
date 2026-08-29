@@ -161,6 +161,43 @@ type Question struct {
         Class uint16
 }
 
+// Labels yields the labels of the absolute name Name in presentation form,
+// in order and without the separating dots; the root name yields nothing.
+//
+// It allocates nothing. See [NextLabel] for the underlying scan.
+func (question Question) Labels(yield func(string) bool) {
+        <span class="cov2" title="6">name := question.Name
+        if name == "." </span>{
+                <span class="cov1" title="1">return
+</span>        }
+        <span class="cov2" title="5">for start := 0; start &lt; len(name); </span>{
+                <span class="cov2" title="9">next, end := NextLabel(name, start)
+                if !yield(name[start:next-1]) || end </span>{
+                        <span class="cov2" title="5">return
+</span>                }
+                <span class="cov2" title="4">start = next</span>
+        }
+}
+
+// NextLabel returns the offset of the label following the one that starts at
+// offset in the presentation-form name, and whether that label was the last.
+//
+// It is a drop-in for miekg/dns NextLabel on the absolute names this package
+// produces: offset must be a label start, an escaped dot never separates
+// labels, and the trailing dot is not a separator.
+func NextLabel(name string, offset int) (next int, end bool) {
+        <span class="cov3" title="20">for i := offset; i &lt; len(name)-1; i++ </span>{
+                <span class="cov4" title="72">switch name[i] </span>{
+                case '\\':
+                        // Skip the escaped octet; \DDD digits are never dots.
+                        <span class="cov2" title="7">i++</span>
+                case '.':
+                        <span class="cov2" title="9">return i + 1, false</span>
+                }
+        }
+        <span class="cov3" title="11">return len(name), true</span>
+}
+
 // Message contains a DNS header and its questions.
 type Message struct {
         Header        Header
