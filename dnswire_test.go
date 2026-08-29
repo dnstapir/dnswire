@@ -895,3 +895,38 @@ func TestQuestionLabels(t *testing.T) {
 		t.Errorf("early break yielded %d labels, want 1", seen)
 	}
 }
+
+// TestNextLabel walks names label by label and checks each step against the
+// miekg/dns NextLabel contract, including the empty and root names.
+func TestNextLabel(t *testing.T) {
+	type step struct {
+		next int
+		end  bool
+	}
+	tests := []struct {
+		name  string
+		steps []step
+	}{
+		{"", []step{{0, true}}},
+		{".", []step{{1, true}}},
+		{"com.", []step{{4, true}}},
+		{"example.com.", []step{{8, false}, {12, true}}},
+		{`a\.b.example.`, []step{{5, false}, {13, true}}},
+		{`a\\.b.`, []step{{4, false}, {6, true}}},
+		{`\000x.y.`, []step{{6, false}, {8, true}}},
+	}
+	for _, test := range tests {
+		offset := 0
+		for i, want := range test.steps {
+			next, end := NextLabel(test.name, offset)
+			if next != want.next || end != want.end {
+				t.Errorf("NextLabel(%q, %d) = (%d, %t), want (%d, %t)", test.name, offset, next, end, want.next, want.end)
+				break
+			}
+			if end != (i == len(test.steps)-1) {
+				t.Errorf("NextLabel(%q, %d) ended after step %d of %d", test.name, offset, i+1, len(test.steps))
+			}
+			offset = next
+		}
+	}
+}

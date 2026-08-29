@@ -201,7 +201,7 @@ func compareQuestions(t *testing.T, data []byte, message dnswire.Message, v1 *dn
 		for label := range question.Labels {
 			labels = append(labels, label)
 		}
-		if wantLabels := nextLabels(question.Name); !reflect.DeepEqual(labels, wantLabels) {
+		if wantLabels := nextLabels(t, question.Name); !reflect.DeepEqual(labels, wantLabels) {
 			t.Fatalf("Unpack(%x) question %d Labels = %q, miekg/dns NextLabel = %q", data, i, labels, wantLabels)
 		}
 		if question.Type != v1.Question[i].Qtype || question.Class != v1.Question[i].Qclass {
@@ -306,14 +306,19 @@ func FuzzUnpackDifferential(f *testing.F) {
 }
 
 // nextLabels splits a presentation name with miekg/dns NextLabel the way EDM
-// does, returning nil for the root.
-func nextLabels(name string) (labels []string) {
+// does, returning nil for the root. Each step also requires dnswire.NextLabel
+// to agree with miekg/dns from the same label start.
+func nextLabels(t *testing.T, name string) (labels []string) {
+	t.Helper()
 	if name == "" || name == "." {
 		return
 	}
 	start := 0
 	for {
 		next, end := dnsv1.NextLabel(name, start)
+		if gotNext, gotEnd := dnswire.NextLabel(name, start); gotNext != next || gotEnd != end {
+			t.Fatalf("NextLabel(%q, %d) = (%d, %t), miekg/dns = (%d, %t)", name, start, gotNext, gotEnd, next, end)
+		}
 		labels = append(labels, name[start:next-1])
 		if end {
 			return
