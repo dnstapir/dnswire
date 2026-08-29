@@ -232,7 +232,7 @@ func differential(t *testing.T, data []byte) {
 	}
 }
 
-// TestUnpackLegalMessages verifies that Parse accepts every generated
+// TestUnpackLegalMessages verifies that Unpack accepts every generated
 // spec-legal message and decodes the names the oracle expects, cross-checked
 // against miekg/dns v1 where it accepts the same message.
 func TestUnpackLegalMessages(t *testing.T) {
