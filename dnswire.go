@@ -81,6 +81,30 @@ type Question struct {
 	Class uint16
 }
 
+// Labels yields the labels of Name in presentation form, in order and
+// without the separating dots; the root name yields nothing.
+//
+// It allocates nothing and splits exactly as miekg/dns NextLabel does.
+func (question Question) Labels(yield func(string) bool) {
+	name := question.Name
+	if name == "." {
+		return
+	}
+	start := 0
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '\\':
+			// Skip the escaped octet; \DDD digits are never dots.
+			i++
+		case '.':
+			if !yield(name[start:i]) {
+				return
+			}
+			start = i + 1
+		}
+	}
+}
+
 // Message contains a DNS header and its questions.
 type Message struct {
 	Header        Header

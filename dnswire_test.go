@@ -865,3 +865,33 @@ func testBitStringPresentation(data []byte, bits int) string {
 	digits = digits[:(bits+3)/4]
 	return `\[x` + digits + `/` + strconv.Itoa(bits) + `].`
 }
+
+func TestQuestionLabels(t *testing.T) {
+	tests := []struct {
+		name string
+		want []string
+	}{
+		{".", nil},
+		{"example.com.", []string{"example", "com"}},
+		{`a\.b.example.`, []string{`a\.b`, "example"}},
+		{`a\\.b.`, []string{`a\\`, "b"}},
+		{`\000\046x.y.`, []string{`\000\046x`, "y"}},
+	}
+	for _, test := range tests {
+		var got []string
+		for label := range (Question{Name: test.name}).Labels {
+			got = append(got, label)
+		}
+		if !reflect.DeepEqual(got, test.want) {
+			t.Errorf("Labels(%q) = %q, want %q", test.name, got, test.want)
+		}
+	}
+	seen := 0
+	for range (Question{Name: "a.b.c."}).Labels {
+		seen++
+		break
+	}
+	if seen != 1 {
+		t.Errorf("early break yielded %d labels, want 1", seen)
+	}
+}
