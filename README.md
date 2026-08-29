@@ -29,8 +29,9 @@ for question := range message.Questions {
 
 ## Scope
 
-`Parse` validates the 12-byte header and complete question section. It does
-not inspect or validate answer, authority, or additional records.
+`Message.Unpack` validates the 12-byte header and complete question section;
+`Parse` is shorthand for it on a new `Message`. Neither inspects or validates
+answer, authority, or additional records.
 
 `Message.Question` holds the first question. `Message.Questions` enumerates
 the complete question section in wire order.
@@ -64,8 +65,8 @@ against miekg/dns v1.1.72 and v2 v0.6.101:
 - **Message size.** `dnswire` rejects input over the 65535-octet DNS message
   limit up front; v1 and v2 accept oversized input.
 - **Errors.** `dnswire` reports every failure through the matchable
-  sentinels `ErrMalformed` and `ErrUnsupportedLabel` and returns a zero
-  `Message` alongside any error.
+  sentinels `ErrMalformed` and `ErrUnsupportedLabel` and leaves a zero
+  `Message` on any error.
 
 `benchmarks/differential_test.go` cross-checks `dnswire` against v1 on
 generated legal messages and random mutations of them; whenever both accept a
@@ -73,7 +74,7 @@ message they must decode identical questions.
 
 ## Security
 
-`Parse` is designed for adversarial input. [SECURITY.md](SECURITY.md)
+`Unpack` is designed for adversarial input. [SECURITY.md](SECURITY.md)
 describes its guarantees, resource characteristics, and verification.
 
 ## Benchmarks

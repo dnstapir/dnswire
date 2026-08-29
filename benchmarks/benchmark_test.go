@@ -31,8 +31,8 @@ func BenchmarkParse(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(len(test.data)))
 				for b.Loop() {
-					message, err := dnswire.Parse(test.data)
-					if err != nil {
+					var message dnswire.Message
+					if err := message.Unpack(test.data); err != nil {
 						b.Fatal(err)
 					}
 					question := message.Question

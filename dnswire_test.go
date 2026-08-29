@@ -128,6 +128,34 @@ func TestParseNoQuestions(t *testing.T) {
 	}
 }
 
+func TestUnpackOverwritesMessage(t *testing.T) {
+	var message Message
+	multi := compressedQuestionPair(wireName([]byte("example"), []byte("com")))
+	if err := message.Unpack(multi); err != nil {
+		t.Fatal(err)
+	}
+	if err := message.Unpack(questionPacket(wireName([]byte("only")))); err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for question := range message.Questions {
+		if question.Name != "only." {
+			t.Fatalf("Questions[%d].Name = %q, want %q", seen, question.Name, "only.")
+		}
+		seen++
+	}
+	if seen != 1 {
+		t.Fatalf("decoded %d questions, want 1", seen)
+	}
+	if err := message.Unpack(testHeader(7, 0, 0, 0, 0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	want := Message{Header: Header{ID: 7}, Length: HeaderSize}
+	if !reflect.DeepEqual(message, want) {
+		t.Fatalf("Message = %#v, want %#v", message, want)
+	}
+}
+
 func TestParseLengthIgnoresTrailingData(t *testing.T) {
 	data := questionPacket(wireName([]byte("example"), []byte("com")))
 	want := len(data)

@@ -12,7 +12,7 @@ import (
 	dnsv1 "github.com/miekg/dns"
 )
 
-// This file cross-checks dnswire.Parse against an independent legal-message
+// This file cross-checks dnswire.Message.Unpack against an independent legal-message
 // oracle and against miekg/dns v1 question decoding. miekg/dns v2 is not
 // compared: it intentionally does not decode legacy QNAMEs and its
 // presentation names are lossy, so neither its accept/reject decisions nor
@@ -178,7 +178,7 @@ func compareHeader(t *testing.T, data []byte, header dnswire.Header, v1 *dnsv1.M
 		header.RecursionDesired() != v1.RecursionDesired || header.RecursionAvailable() != v1.RecursionAvailable ||
 		header.Zero() != v1.Zero || header.AuthenticatedData() != v1.AuthenticatedData ||
 		header.CheckingDisabled() != v1.CheckingDisabled || header.Rcode() != v1.Rcode&0xf {
-		t.Fatalf("Parse(%x) header = %+v, miekg/dns v1 = %+v", data, header, v1.MsgHdr)
+		t.Fatalf("Unpack(%x) header = %+v, miekg/dns v1 = %+v", data, header, v1.MsgHdr)
 	}
 }
 
@@ -190,21 +190,21 @@ func compareQuestions(t *testing.T, data []byte, message dnswire.Message, v1 *dn
 	i := 0
 	for question := range message.Questions {
 		if i >= len(v1.Question) {
-			t.Fatalf("Parse(%x) decoded more than the %d questions miekg/dns v1 decoded", data, len(v1.Question))
+			t.Fatalf("Unpack(%x) decoded more than the %d questions miekg/dns v1 decoded", data, len(v1.Question))
 		}
 		got, gotOK := presentationLabels(question.Name)
 		want, wantOK := presentationLabels(v1.Question[i].Name)
 		if !gotOK || !wantOK || !reflect.DeepEqual(got, want) {
-			t.Fatalf("Parse(%x) question %d name = %q, miekg/dns v1 = %q", data, i, question.Name, v1.Question[i].Name)
+			t.Fatalf("Unpack(%x) question %d name = %q, miekg/dns v1 = %q", data, i, question.Name, v1.Question[i].Name)
 		}
 		if question.Type != v1.Question[i].Qtype || question.Class != v1.Question[i].Qclass {
-			t.Fatalf("Parse(%x) question %d type/class = %d/%d, miekg/dns v1 = %d/%d",
+			t.Fatalf("Unpack(%x) question %d type/class = %d/%d, miekg/dns v1 = %d/%d",
 				data, i, question.Type, question.Class, v1.Question[i].Qtype, v1.Question[i].Qclass)
 		}
 		i++
 	}
 	if i != len(v1.Question) {
-		t.Fatalf("Parse(%x) decoded %d questions, miekg/dns v1 decoded %d", data, i, len(v1.Question))
+		t.Fatalf("Unpack(%x) decoded %d questions, miekg/dns v1 decoded %d", data, i, len(v1.Question))
 	}
 }
 
@@ -215,13 +215,14 @@ func compareQuestions(t *testing.T, data []byte, message dnswire.Message, v1 *dn
 // labels), so acceptance itself is not compared; decoded questions are.
 func differential(t *testing.T, data []byte) {
 	t.Helper()
-	message, err := dnswire.Parse(data)
+	var message dnswire.Message
+	err := message.Unpack(data)
 	if err != nil {
 		if !errors.Is(err, dnswire.ErrMalformed) && !errors.Is(err, dnswire.ErrUnsupportedLabel) {
-			t.Fatalf("Parse(%x) unexpected error identity: %v", data, err)
+			t.Fatalf("Unpack(%x) unexpected error identity: %v", data, err)
 		}
 		if !reflect.DeepEqual(message, dnswire.Message{}) {
-			t.Fatalf("Parse(%x) = %#v, want zero Message on error", data, message)
+			t.Fatalf("Unpack(%x) = %#v, want zero Message on error", data, message)
 		}
 		return
 	}
@@ -238,19 +239,20 @@ func TestParseLegalMessages(t *testing.T) {
 	r := rand.New(rand.NewPCG(2026, 8))
 	for range 100_000 {
 		data, want := legalMessage(r)
-		message, err := dnswire.Parse(data)
+		var message dnswire.Message
+		err := message.Unpack(data)
 		if err != nil {
-			t.Fatalf("Parse(%x) = %v, want success", data, err)
+			t.Fatalf("Unpack(%x) = %v, want success", data, err)
 		}
 		i := 0
 		for question := range message.Questions {
 			if i >= len(want) || question.Name != want[i] {
-				t.Fatalf("Parse(%x) question %d name = %q, oracle = %q", data, i, question.Name, want[i])
+				t.Fatalf("Unpack(%x) question %d name = %q, oracle = %q", data, i, question.Name, want[i])
 			}
 			i++
 		}
 		if i != len(want) {
-			t.Fatalf("Parse(%x) decoded %d questions, oracle has %d", data, i, len(want))
+			t.Fatalf("Unpack(%x) decoded %d questions, oracle has %d", data, i, len(want))
 		}
 		var v1 dnsv1.Msg
 		if v1.Unpack(data) == nil {
