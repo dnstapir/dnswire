@@ -84,25 +84,38 @@ type Question struct {
 // Labels yields the labels of Name in presentation form, in order and
 // without the separating dots; the root name yields nothing.
 //
-// It allocates nothing and splits exactly as miekg/dns NextLabel does.
+// It allocates nothing. See [NextLabel] for the underlying scan.
 func (question Question) Labels(yield func(string) bool) {
 	name := question.Name
 	if name == "." {
 		return
 	}
-	start := 0
-	for i := 0; i < len(name); i++ {
+	for start := 0; start < len(name); {
+		next, end := NextLabel(name, start)
+		if !yield(name[start:next-1]) || end {
+			return
+		}
+		start = next
+	}
+}
+
+// NextLabel returns the offset of the label following the one that starts at
+// offset in the presentation-form name, and whether that label was the last.
+//
+// It is a drop-in for miekg/dns NextLabel on names this package produces:
+// offset must be a label start, an escaped dot never separates labels, and
+// the trailing dot of an absolute name is not a separator.
+func NextLabel(name string, offset int) (next int, end bool) {
+	for i := offset; i < len(name)-1; i++ {
 		switch name[i] {
 		case '\\':
 			// Skip the escaped octet; \DDD digits are never dots.
 			i++
 		case '.':
-			if !yield(name[start:i]) {
-				return
-			}
-			start = i + 1
+			return i + 1, false
 		}
 	}
+	return len(name), true
 }
 
 // Message contains a DNS header and its questions.

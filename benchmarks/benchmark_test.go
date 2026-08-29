@@ -145,6 +145,20 @@ func BenchmarkLabels(b *testing.B) {
 					}
 				}
 			})
+			b.Run("dnswire_nextlabel", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					start := 0
+					for {
+						next, end := dnswire.NextLabel(test.qname, start)
+						resultName = test.qname[start : next-1]
+						if end {
+							break
+						}
+						start = next
+					}
+				}
+			})
 			b.Run("miekg_v1", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
