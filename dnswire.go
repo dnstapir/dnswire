@@ -451,15 +451,22 @@ func appendBitStringPresentation(text, data []byte, bits int) []byte {
 	return append(text, ']')
 }
 
+// escapeNeeded marks the octets RFC 1035 presentation escaping cannot copy
+// verbatim: control and non-ASCII octets plus the escaped specials.
+var escapeNeeded = func() (table [256]bool) {
+	for i := range table {
+		table[i] = i < ' ' || i > '~'
+	}
+	for _, value := range []byte{'.', ' ', '\'', '@', ';', '(', ')', '"', '\\'} {
+		table[value] = true
+	}
+	return
+}()
+
 func appendEscapedLabel(text, label []byte) []byte {
 	for _, value := range label {
-		switch value {
-		case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
+		if escapeNeeded[value] {
 			return appendEscapedLabelSlow(text, label)
-		default:
-			if value < ' ' || value > '~' {
-				return appendEscapedLabelSlow(text, label)
-			}
 		}
 	}
 	return append(text, label...)
