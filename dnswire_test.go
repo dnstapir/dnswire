@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestParseHeaderAndQuestions(t *testing.T) {
+func TestUnpackHeaderAndQuestions(t *testing.T) {
 	data := testHeader(0x1234, 0x85a3, 2, 7, 8, 9)
 	firstName := len(data)
 	data = append(data, wireName([]byte("example"), []byte("com"))...)
@@ -22,9 +22,13 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	data = appendUint16(data, 28)
 	data = appendUint16(data, 255)
 
-	got, err := Parse(data)
+	var got Message
+	n, err := got.Unpack(data)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if n != len(data) {
+		t.Fatalf("consumed %d octets, want %d", n, len(data))
 	}
 	wantHeader := Header{
 		ID:              0x1234,
@@ -47,9 +51,6 @@ func TestParseHeaderAndQuestions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotQuestions, wantQuestions) {
 		t.Fatalf("Questions = %#v, want %#v", gotQuestions, wantQuestions)
-	}
-	if got.Length != len(data) {
-		t.Fatalf("Length = %d, want %d", got.Length, len(data))
 	}
 	seen := 0
 	for range got.Questions {
@@ -112,16 +113,17 @@ func TestHeaderOpcodeRcode(t *testing.T) {
 	}
 }
 
-func TestParseNoQuestions(t *testing.T) {
-	got, err := Parse(testHeader(123, 0, 0, 0, 0, 0))
+func TestUnpackNoQuestions(t *testing.T) {
+	var got Message
+	n, err := got.Unpack(testHeader(123, 0, 0, 0, 0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Question != (Question{}) {
 		t.Fatalf("Question = %#v, want zero value", got.Question)
 	}
-	if got.Length != HeaderSize {
-		t.Fatalf("Length = %d, want %d", got.Length, HeaderSize)
+	if n != HeaderSize {
+		t.Fatalf("consumed %d octets, want %d", n, HeaderSize)
 	}
 	for range got.Questions {
 		t.Fatal("message yielded a question")
@@ -131,10 +133,10 @@ func TestParseNoQuestions(t *testing.T) {
 func TestUnpackOverwritesMessage(t *testing.T) {
 	var message Message
 	multi := compressedQuestionPair(wireName([]byte("example"), []byte("com")))
-	if err := message.Unpack(multi); err != nil {
+	if _, err := message.Unpack(multi); err != nil {
 		t.Fatal(err)
 	}
-	if err := message.Unpack(questionPacket(wireName([]byte("only")))); err != nil {
+	if _, err := message.Unpack(questionPacket(wireName([]byte("only")))); err != nil {
 		t.Fatal(err)
 	}
 	seen := 0
@@ -147,29 +149,30 @@ func TestUnpackOverwritesMessage(t *testing.T) {
 	if seen != 1 {
 		t.Fatalf("decoded %d questions, want 1", seen)
 	}
-	if err := message.Unpack(testHeader(7, 0, 0, 0, 0, 0)); err != nil {
+	if _, err := message.Unpack(testHeader(7, 0, 0, 0, 0, 0)); err != nil {
 		t.Fatal(err)
 	}
-	want := Message{Header: Header{ID: 7}, Length: HeaderSize}
+	want := Message{Header: Header{ID: 7}}
 	if !reflect.DeepEqual(message, want) {
 		t.Fatalf("Message = %#v, want %#v", message, want)
 	}
 }
 
-func TestParseLengthIgnoresTrailingData(t *testing.T) {
+func TestUnpackCountIgnoresTrailingData(t *testing.T) {
 	data := questionPacket(wireName([]byte("example"), []byte("com")))
 	want := len(data)
 	data = append(data, 0xde, 0xad, 0xbe, 0xef)
-	got, err := Parse(data)
+	var got Message
+	n, err := got.Unpack(data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Length != want {
-		t.Fatalf("Length = %d, want %d", got.Length, want)
+	if n != want {
+		t.Fatalf("consumed %d octets, want %d", n, want)
 	}
 }
 
-func TestParsePresentationNames(t *testing.T) {
+func TestUnpackPresentationNames(t *testing.T) {
 	tests := []struct {
 		name   string
 		labels [][]byte
@@ -214,7 +217,7 @@ func TestParsePresentationNames(t *testing.T) {
 	}
 }
 
-func TestParseCompressionPointerChain(t *testing.T) {
+func TestUnpackCompressionPointerChain(t *testing.T) {
 	data := testHeader(0, 0, 4, 0, 0, 0)
 	firstName := len(data)
 	data = append(data, wireName([]byte("example"), []byte("com"))...)
@@ -252,7 +255,7 @@ func TestParseCompressionPointerChain(t *testing.T) {
 	}
 }
 
-func TestParseManyLabels(t *testing.T) {
+func TestUnpackManyLabels(t *testing.T) {
 	name := wireName([]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e"))
 	got, err := Parse(compressedQuestionPair(name))
 	if err != nil {
@@ -270,7 +273,7 @@ func TestParseManyLabels(t *testing.T) {
 	}
 }
 
-func TestParseHistoricBitStringLabel(t *testing.T) {
+func TestUnpackHistoricBitStringLabel(t *testing.T) {
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	data = append(data, 0x41, 14, 0xd0, 0x74, 0)
 	data = appendUint16(data, 1)
@@ -319,7 +322,7 @@ func TestParseHistoricBitStringLabel(t *testing.T) {
 	}
 }
 
-func TestParseNameWireLengthLimit(t *testing.T) {
+func TestUnpackNameWireLengthLimit(t *testing.T) {
 	labels := [][]byte{
 		bytes.Repeat([]byte{'a'}, 63),
 		bytes.Repeat([]byte{'b'}, 63),
@@ -337,7 +340,7 @@ func TestParseNameWireLengthLimit(t *testing.T) {
 	}
 }
 
-func TestParseMalformed(t *testing.T) {
+func TestUnpackMalformed(t *testing.T) {
 	tooLarge := make([]byte, maxMessageSize+1)
 	genericUnterminated := append(testHeader(0, 0, 2, 0, 0, 0), 9, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a')
 	genericTruncated := append(testHeader(0, 0, 2, 0, 0, 0), 10, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a')
@@ -390,7 +393,7 @@ func TestParseMalformed(t *testing.T) {
 	}
 }
 
-func TestParseCompressedNameTooLong(t *testing.T) {
+func TestUnpackCompressedNameTooLong(t *testing.T) {
 	labels := [][]byte{
 		bytes.Repeat([]byte{'a'}, 63),
 		bytes.Repeat([]byte{'b'}, 63),
@@ -415,9 +418,9 @@ func TestParseCompressedNameTooLong(t *testing.T) {
 	}
 }
 
-// TestParseCompressedNameMaxLength exercises both sides of the 255-octet
+// TestUnpackCompressedNameMaxLength exercises both sides of the 255-octet
 // expanded-name limit for compressed names.
-func TestParseCompressedNameMaxLength(t *testing.T) {
+func TestUnpackCompressedNameMaxLength(t *testing.T) {
 	// A 253-octet tail leaves room for exactly one 2-octet prefix label.
 	tailLabels := [][]byte{
 		bytes.Repeat([]byte{'a'}, 63),
@@ -464,9 +467,9 @@ func TestParseCompressedNameMaxLength(t *testing.T) {
 	}
 }
 
-// TestParsePointerToBitStringBoundary verifies that compression pointers may
+// TestUnpackPointerToBitStringBoundary verifies that compression pointers may
 // target bit-string label boundaries of a prior name.
-func TestParsePointerToBitStringBoundary(t *testing.T) {
+func TestUnpackPointerToBitStringBoundary(t *testing.T) {
 	data := testHeader(0, 0, 3, 0, 0, 0)
 	bitString := len(data)
 	data = append(data, 0x41, 14, 0xd0, 0x74)
@@ -498,9 +501,9 @@ func TestParsePointerToBitStringBoundary(t *testing.T) {
 	}
 }
 
-// TestParsePointerToLabelInterior verifies that a compression pointer into
+// TestUnpackPointerToLabelInterior verifies that a compression pointer into
 // the interior of a decoded label is rejected.
-func TestParsePointerToLabelInterior(t *testing.T) {
+func TestUnpackPointerToLabelInterior(t *testing.T) {
 	data := testHeader(0, 0, 2, 0, 0, 0)
 	firstName := len(data)
 	data = append(data, wireName([]byte("example"), []byte("com"))...)
@@ -519,10 +522,10 @@ func TestParsePointerToLabelInterior(t *testing.T) {
 	}
 }
 
-// TestParsePointerWithinOwnName verifies that a pointer to an earlier label
+// TestUnpackPointerWithinOwnName verifies that a pointer to an earlier label
 // of the name still being decoded is rejected: it would loop, and that label
 // is not a completed boundary.
-func TestParsePointerWithinOwnName(t *testing.T) {
+func TestUnpackPointerWithinOwnName(t *testing.T) {
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	nameStart := len(data)
 	data = append(data, 1, 'a', 1, 'b', 0xc0, byte(nameStart+2))
@@ -538,9 +541,9 @@ func TestParsePointerWithinOwnName(t *testing.T) {
 	}
 }
 
-// TestParseMaxQuestionCount parses the largest question count that can fit
+// TestUnpackMaxQuestionCount parses the largest question count that can fit
 // in a maximum-size message and rejects a count of one more.
-func TestParseMaxQuestionCount(t *testing.T) {
+func TestUnpackMaxQuestionCount(t *testing.T) {
 	const count = (maxMessageSize - HeaderSize) / 5
 	data := testHeader(0, 0, count, 0, 0, 0)
 	for range count {
@@ -570,11 +573,11 @@ func TestParseMaxQuestionCount(t *testing.T) {
 	}
 }
 
-// TestParseWorstCaseCompressionAmplification fills a maximum-size message
+// TestUnpackWorstCaseCompressionAmplification fills a maximum-size message
 // with escape-heavy compressed names: each 8-octet question decodes to a name
 // near the 1020-octet presentation limit. Parse must stay linear and every
 // name must decode correctly.
-func TestParseWorstCaseCompressionAmplification(t *testing.T) {
+func TestUnpackWorstCaseCompressionAmplification(t *testing.T) {
 	tailLabels := [][]byte{
 		bytes.Repeat([]byte{0}, 63),
 		bytes.Repeat([]byte{0}, 63),
@@ -621,11 +624,11 @@ func TestParseWorstCaseCompressionAmplification(t *testing.T) {
 	}
 }
 
-// FuzzParse checks Parse's invariants on arbitrary input: stable error
+// FuzzUnpack checks Unpack's invariants on arbitrary input: stable error
 // identities, a zero Message on error, input immutability, absolute names
 // within the presentation-size bound, question-count agreement with the
 // header, and determinism.
-func FuzzParse(f *testing.F) {
+func FuzzUnpack(f *testing.F) {
 	f.Add([]byte(nil))
 	f.Add(questionPacket(wireName([]byte("example"), []byte("com"))))
 	f.Add(questionPacket(wireName([]byte("a.b"), []byte{0, 255})))
@@ -636,9 +639,10 @@ func FuzzParse(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		before := bytes.Clone(data)
-		got, err := Parse(data)
+		var got Message
+		n, err := got.Unpack(data)
 		if !bytes.Equal(data, before) {
-			t.Fatal("Parse modified its input")
+			t.Fatal("Unpack modified its input")
 		}
 		if err != nil {
 			if !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupportedLabel) {
@@ -646,6 +650,9 @@ func FuzzParse(f *testing.F) {
 			}
 			if !reflect.DeepEqual(got, Message{}) {
 				t.Fatalf("Message = %#v, want zero value on error", got)
+			}
+			if n != 0 {
+				t.Fatalf("consumed %d octets on error, want 0", n)
 			}
 			return
 		}
@@ -662,12 +669,13 @@ func FuzzParse(f *testing.F) {
 		if questionCount != int(got.Header.QuestionCount) {
 			t.Fatalf("decoded %d questions, header says %d", questionCount, got.Header.QuestionCount)
 		}
-		if got.Length < HeaderSize || got.Length > len(data) {
-			t.Fatalf("Length = %d, data is %d octets", got.Length, len(data))
+		if n < HeaderSize || n > len(data) {
+			t.Fatalf("consumed %d octets, data is %d octets", n, len(data))
 		}
-		prefix, err := Parse(data[:got.Length])
-		if err != nil || !reflect.DeepEqual(got, prefix) {
-			t.Fatalf("Parse of %d-octet prefix = (%#v, %v), want (%#v, nil)", got.Length, prefix, err, got)
+		var prefix Message
+		prefixN, err := prefix.Unpack(data[:n])
+		if err != nil || prefixN != n || !reflect.DeepEqual(got, prefix) {
+			t.Fatalf("Unpack of %d-octet prefix = (%d, %#v, %v), want (%d, %#v, nil)", n, prefixN, prefix, err, n, got)
 		}
 		again, err := Parse(data)
 		if err != nil || !reflect.DeepEqual(got, again) {
@@ -676,7 +684,7 @@ func FuzzParse(f *testing.F) {
 	})
 }
 
-func FuzzParseOrdinaryName(f *testing.F) {
+func FuzzUnpackOrdinaryName(f *testing.F) {
 	f.Add([]byte("example"), []byte("com"))
 	f.Add([]byte("a.b"), []byte(`a\b`))
 	f.Add([]byte{0, 7, 31}, []byte{127, 128, 255})
@@ -712,7 +720,7 @@ func FuzzParseOrdinaryName(f *testing.F) {
 	})
 }
 
-func FuzzParseHistoricBitString(f *testing.F) {
+func FuzzUnpackHistoricBitString(f *testing.F) {
 	f.Add(uint8(14), []byte{0xd0, 0x74})
 	f.Add(uint8(1), []byte{0xff})
 	f.Add(uint8(0), make([]byte, 32))

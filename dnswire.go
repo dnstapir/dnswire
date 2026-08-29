@@ -83,11 +83,8 @@ type Question struct {
 
 // Message contains a DNS header and its questions.
 type Message struct {
-	Header   Header
-	Question Question // First question; zero when Header.QuestionCount is zero.
-	// Length is the number of octets Unpack consumed: the header plus the
-	// complete question section. Records begin at data[Length:].
-	Length        int
+	Header        Header
+	Question      Question // First question; zero when Header.QuestionCount is zero.
 	moreQuestions []Question
 }
 
@@ -105,14 +102,16 @@ func (message *Message) Questions(yield func(Question) bool) {
 
 // Parse decodes a DNS header and every question from data.
 //
-// It is shorthand for [Message.Unpack] on a new Message.
+// It is shorthand for [Message.Unpack] on a new Message, discarding the
+// consumed-octet count.
 func Parse(data []byte) (message Message, err error) {
-	err = message.Unpack(data)
+	_, err = message.Unpack(data)
 	return
 }
 
 // Unpack decodes a DNS header and every question from data into message,
-// overwriting it entirely.
+// overwriting it entirely, and returns the number of octets consumed: the
+// header plus the complete question section, so records begin at data[n:].
 //
 // Names use RFC 1035 presentation escaping, preserving every ordinary-label
 // octet and every label boundary. Historic RFC 2673 bit-string labels use
@@ -120,8 +119,9 @@ func Parse(data []byte) (message Message, err error) {
 // previously decoded label boundary.
 //
 // Unpack does not inspect or validate answer, authority, or additional
-// sections. It leaves a zero Message on error and never retains data.
-func (message *Message) Unpack(data []byte) (err error) {
+// sections. On error it leaves a zero Message and returns a zero count. It
+// never retains data.
+func (message *Message) Unpack(data []byte) (n int, err error) {
 	*message = Message{}
 	if len(data) < HeaderSize {
 		err = malformed(len(data), "header is shorter than 12 octets")
@@ -169,7 +169,7 @@ func (message *Message) Unpack(data []byte) (err error) {
 			message.moreQuestions = append(message.moreQuestions, question)
 		}
 	}
-	message.Length = off
+	n = off
 	return
 }
 

@@ -45,7 +45,7 @@ A maximally hostile 65535-octet message can legally expand to roughly 8 MB of
 transient decoded name strings (about a 125x amplification) — the inherent
 worst case of RFC 1035 compression combined with presentation escaping. The
 expansion is bounded, linear, and regression-tested
-(`TestParseWorstCaseCompressionAmplification`). `Unpack` decodes every question
+(`TestUnpackWorstCaseCompressionAmplification`). `Unpack` decodes every question
 before returning, so callers wanting a stricter limit must enforce it before
 calling `Unpack`: after checking the message holds at least `HeaderSize`
 octets, read the question count directly from the raw message (the big-endian
@@ -55,8 +55,8 @@ octets, read the question count directly from the raw message (the big-endian
 
 - `go test -race` with 100% statement coverage, including adversarial
   regression tests for pointer and length edge cases.
-- Three fuzz targets (`FuzzParse`, `FuzzParseOrdinaryName`,
-  `FuzzParseHistoricBitString`) enforcing stable error identities, zero
+- Three fuzz targets (`FuzzUnpack`, `FuzzUnpackOrdinaryName`,
+  `FuzzUnpackHistoricBitString`) enforcing stable error identities, zero
   `Message` on error, input immutability, absolute names within the
   1020-octet presentation bound, question-count agreement, and determinism.
   The audit ran roughly 250 million executions without a failure.
@@ -65,7 +65,7 @@ octets, read the question count directly from the raw message (the big-endian
   `benchmarks` module keeps the parser module dependency-free). The audit ran
   4.28 million generated legal messages and about 25 million mutated messages
   with zero divergences. A deterministic slice of both runs in CI, and
-  `FuzzParseDifferential` supports longer local runs.
+  `FuzzUnpackDifferential` supports longer local runs.
 
 ## Reporting a vulnerability
 

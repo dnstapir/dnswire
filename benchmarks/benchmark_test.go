@@ -32,7 +32,7 @@ func BenchmarkParse(b *testing.B) {
 				b.SetBytes(int64(len(test.data)))
 				for b.Loop() {
 					var message dnswire.Message
-					if err := message.Unpack(test.data); err != nil {
+					if _, err := message.Unpack(test.data); err != nil {
 						b.Fatal(err)
 					}
 					question := message.Question
