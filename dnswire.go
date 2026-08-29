@@ -490,6 +490,10 @@ func appendEscapedLabel(text, label []byte) []byte {
 
 // appendEscapedLabelSlow appends label to text, escaping specials with a
 // backslash and other escape-needing octets as \DDD.
+//
+// It stays out of line so appendEscapedLabel itself fits the inlining budget.
+//
+//go:noinline
 func appendEscapedLabelSlow(text, label []byte) []byte {
 	for _, value := range label {
 		switch value {
