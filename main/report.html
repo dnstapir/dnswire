@@ -531,16 +531,23 @@ func appendBitStringPresentation(text, data []byte, bits int) []byte {
         return append(text, ']')</span>
 }
 
+// escapeNeeded marks the octets RFC 1035 presentation escaping cannot copy
+// verbatim: control and non-ASCII octets plus the escaped specials.
+var escapeNeeded = func() (table [256]bool) {
+        <span class="cov1" title="1">for i := range table </span>{
+                <span class="cov5" title="256">table[i] = i &lt; ' ' || i &gt; '~'
+</span>        }
+        <span class="cov1" title="1">for _, value := range []byte{'.', ' ', '\'', '@', ';', '(', ')', '"', '\\'} </span>{
+                <span class="cov2" title="9">table[value] = true
+</span>        }
+        <span class="cov1" title="1">return</span>
+}()
+
 func appendEscapedLabel(text, label []byte) []byte {
         <span class="cov8" title="8248">for _, value := range label </span>{
-                <span class="cov9" title="9543">switch value </span>{
-                case '.', ' ', '\'', '@', ';', '(', ')', '"', '\\':
-                        <span class="cov3" title="10">return appendEscapedLabelSlow(text, label)</span>
-                default:
-                        <span class="cov9" title="9533">if value &lt; ' ' || value &gt; '~' </span>{
-                                <span class="cov8" title="8175">return appendEscapedLabelSlow(text, label)
-</span>                        }
-                }
+                <span class="cov9" title="9543">if escapeNeeded[value] </span>{
+                        <span class="cov8" title="8185">return appendEscapedLabelSlow(text, label)
+</span>                }
         }
         <span class="cov4" title="63">return append(text, label...)</span>
 }
