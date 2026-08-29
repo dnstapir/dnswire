@@ -81,8 +81,8 @@ type Question struct {
 	Class uint16
 }
 
-// Labels yields the labels of Name in presentation form, in order and
-// without the separating dots; the root name yields nothing.
+// Labels yields the labels of the absolute name Name in presentation form,
+// in order and without the separating dots; the root name yields nothing.
 //
 // It allocates nothing. See [NextLabel] for the underlying scan.
 func (question Question) Labels(yield func(string) bool) {
@@ -102,9 +102,9 @@ func (question Question) Labels(yield func(string) bool) {
 // NextLabel returns the offset of the label following the one that starts at
 // offset in the presentation-form name, and whether that label was the last.
 //
-// It is a drop-in for miekg/dns NextLabel on names this package produces:
-// offset must be a label start, an escaped dot never separates labels, and
-// the trailing dot of an absolute name is not a separator.
+// It is a drop-in for miekg/dns NextLabel on the absolute names this package
+// produces: offset must be a label start, an escaped dot never separates
+// labels, and the trailing dot is not a separator.
 func NextLabel(name string, offset int) (next int, end bool) {
 	for i := offset; i < len(name)-1; i++ {
 		switch name[i] {

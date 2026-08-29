@@ -129,6 +129,8 @@ func name(labels ...[]byte) []byte {
 	return append(data, 0)
 }
 
+// BenchmarkLabels compares label splitting via Question.Labels, dnswire
+// NextLabel, and miekg/dns NextLabel.
 func BenchmarkLabels(b *testing.B) {
 	for _, test := range []struct {
 		name  string
