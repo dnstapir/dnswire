@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+// TestUnpackHeaderAndQuestions decodes a two-question message and checks the
+// header, both questions, the consumed count, and early iteration exit.
 func TestUnpackHeaderAndQuestions(t *testing.T) {
 	data := testHeader(0x1234, 0x85a3, 2, 7, 8, 9)
 	firstName := len(data)
@@ -64,6 +66,7 @@ func TestUnpackHeaderAndQuestions(t *testing.T) {
 	}
 }
 
+// TestHeaderFlags checks every single-bit flag accessor set and cleared.
 func TestHeaderFlags(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -91,6 +94,7 @@ func TestHeaderFlags(t *testing.T) {
 	}
 }
 
+// TestHeaderOpcodeRcode checks the OPCODE and RCODE field extraction.
 func TestHeaderOpcodeRcode(t *testing.T) {
 	tests := []struct {
 		flags  uint16
@@ -113,6 +117,7 @@ func TestHeaderOpcodeRcode(t *testing.T) {
 	}
 }
 
+// TestUnpackNoQuestions decodes a header-only message.
 func TestUnpackNoQuestions(t *testing.T) {
 	var got Message
 	n, err := got.Unpack(testHeader(123, 0, 0, 0, 0, 0))
@@ -130,6 +135,8 @@ func TestUnpackNoQuestions(t *testing.T) {
 	}
 }
 
+// TestUnpackOverwritesMessage reuses one Message across messages of shrinking
+// question counts and requires no stale state to survive.
 func TestUnpackOverwritesMessage(t *testing.T) {
 	var message Message
 	multi := compressedQuestionPair(wireName([]byte("example"), []byte("com")))
@@ -158,6 +165,8 @@ func TestUnpackOverwritesMessage(t *testing.T) {
 	}
 }
 
+// TestUnpackCountIgnoresTrailingData checks that the consumed count excludes
+// octets after the question section.
 func TestUnpackCountIgnoresTrailingData(t *testing.T) {
 	data := questionPacket(wireName([]byte("example"), []byte("com")))
 	want := len(data)
@@ -172,6 +181,7 @@ func TestUnpackCountIgnoresTrailingData(t *testing.T) {
 	}
 }
 
+// TestUnpackPresentationNames checks RFC 1035 escaping of ordinary labels.
 func TestUnpackPresentationNames(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -217,6 +227,8 @@ func TestUnpackPresentationNames(t *testing.T) {
 	}
 }
 
+// TestUnpackCompressionPointerChain resolves pointers to names, to pointers,
+// and to the root octet.
 func TestUnpackCompressionPointerChain(t *testing.T) {
 	data := testHeader(0, 0, 4, 0, 0, 0)
 	firstName := len(data)
@@ -255,6 +267,8 @@ func TestUnpackCompressionPointerChain(t *testing.T) {
 	}
 }
 
+// TestUnpackManyLabels decodes a name with more labels than the part buffer
+// holds, directly and through a pointer.
 func TestUnpackManyLabels(t *testing.T) {
 	name := wireName([]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e"))
 	got, err := Parse(compressedQuestionPair(name))
@@ -273,6 +287,8 @@ func TestUnpackManyLabels(t *testing.T) {
 	}
 }
 
+// TestUnpackHistoricBitStringLabel decodes RFC 2673 bit-string labels,
+// including the 256-bit form and pad-bit masking.
 func TestUnpackHistoricBitStringLabel(t *testing.T) {
 	data := testHeader(0, 0, 1, 0, 0, 0)
 	data = append(data, 0x41, 14, 0xd0, 0x74, 0)
@@ -322,6 +338,7 @@ func TestUnpackHistoricBitStringLabel(t *testing.T) {
 	}
 }
 
+// TestUnpackNameWireLengthLimit accepts a 255-octet name and rejects 256.
 func TestUnpackNameWireLengthLimit(t *testing.T) {
 	labels := [][]byte{
 		bytes.Repeat([]byte{'a'}, 63),
@@ -340,6 +357,8 @@ func TestUnpackNameWireLengthLimit(t *testing.T) {
 	}
 }
 
+// TestUnpackMalformed rejects each malformed input class with the expected
+// error identity and a zero Message.
 func TestUnpackMalformed(t *testing.T) {
 	tooLarge := make([]byte, maxMessageSize+1)
 	genericUnterminated := append(testHeader(0, 0, 2, 0, 0, 0), 9, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a')
@@ -393,6 +412,8 @@ func TestUnpackMalformed(t *testing.T) {
 	}
 }
 
+// TestUnpackCompressedNameTooLong rejects a compressed name whose expansion
+// exceeds 255 octets.
 func TestUnpackCompressedNameTooLong(t *testing.T) {
 	labels := [][]byte{
 		bytes.Repeat([]byte{'a'}, 63),
@@ -684,6 +705,8 @@ func FuzzUnpack(f *testing.F) {
 	})
 }
 
+// FuzzUnpackOrdinaryName checks ordinary-label names against an independent
+// presentation oracle, directly and through a pointer.
 func FuzzUnpackOrdinaryName(f *testing.F) {
 	f.Add([]byte("example"), []byte("com"))
 	f.Add([]byte("a.b"), []byte(`a\b`))
@@ -720,6 +743,8 @@ func FuzzUnpackOrdinaryName(f *testing.F) {
 	})
 }
 
+// FuzzUnpackHistoricBitString checks bit-string labels against an independent
+// presentation oracle.
 func FuzzUnpackHistoricBitString(f *testing.F) {
 	f.Add(uint8(14), []byte{0xd0, 0x74})
 	f.Add(uint8(1), []byte{0xff})
